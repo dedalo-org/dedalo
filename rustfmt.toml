@@ -1,0 +1,6 @@
+# Stable options only, so `cargo fmt --check` behaves the same for everyone
+# and in CI without needing a nightly toolchain.
+edition = "2024"
+max_width = 100
+newline_style = "Unix"
+use_field_init_shorthand = true

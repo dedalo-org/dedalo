@@ -1,0 +1,44 @@
+# cargo-deny: supply-chain policy for the dependency tree.
+# Run locally with `cargo deny check`.
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+# Every known advisory is an error. Add a documented exception here rather
+# than lowering the bar.
+yanked = "deny"
+ignore = []
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# Nothing in a payments tool should reach for these.
+deny = [
+  { name = "openssl", reason = "prefer rustls; avoid linking system OpenSSL" },
+  { name = "git2", reason = "the git backend shells out to `git` on purpose" },
+]
+skip = []
+
+[licenses]
+version = 2
+# Permissive only, and no wider than the tree actually needs: a copyleft
+# dependency would change what downstream projects can do with Dedalo, and an
+# unused allowance is a door left open for a future one.
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "Unlicense",
+]
+confidence-threshold = 0.9
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

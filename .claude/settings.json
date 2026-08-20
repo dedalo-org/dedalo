@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(cargo build:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo doc:*)",
+      "Bash(cargo fmt:*)",
+      "Bash(cargo nextest:*)",
+      "Bash(cargo test:*)",
+      "Bash(cargo tree:*)",
+      "Bash(cargo deny:*)",
+      "Bash(cargo audit:*)",
+      "Bash(nix build:*)",
+      "Bash(nix develop:*)",
+      "Bash(nix flake check:*)",
+      "Bash(nix flake show:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git status:*)",
+      "Bash(git branch:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/*.key)",
+      "Read(./**/*.pem)",
+      "Read(./**/id_rsa*)",
+      "Bash(cargo publish:*)",
+      "Bash(git push:*)"
+    ],
+    "ask": [
+      "Bash(dedalo settle:*)"
+    ]
+  },
+  "env": {
+    "CARGO_TERM_COLOR": "always",
+    "RUST_BACKTRACE": "1"
+  }
+}

@@ -1,0 +1,19 @@
+name: Feature request
+description: Suggest a capability Dedalo should have
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the funding or workflow problem, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
