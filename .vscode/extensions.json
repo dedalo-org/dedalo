@@ -1,0 +1,14 @@
+{
+  "recommendations": [
+    "rust-lang.rust-analyzer",
+    "vadimcn.vscode-lldb",
+    "tamasfe.even-better-toml",
+    "jnoortheen.nix-ide",
+    "mkhl.direnv",
+    "github.vscode-github-actions",
+    "streetsidesoftware.code-spell-checker"
+  ],
+  "unwantedRecommendations": [
+    "rust-lang.rust"
+  ]
+}

@@ -1,0 +1,45 @@
+name: Bug report
+description: Something behaves differently than documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Payout bugs are the serious ones. If a plan paid the wrong amount,
+        please include the plan JSON — `dedalo plan --amount … --json` — with
+        wallet addresses redacted.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. dedalo init …
+        2. dedalo plan --amount 1000
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: dedalo version
+      placeholder: "dedalo --version"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: "linux x86_64 / macOS 15 / Windows 11"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output
+      description: Run with `-vv` for debug logs.
+      render: shell

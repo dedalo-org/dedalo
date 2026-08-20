@@ -1,0 +1,14 @@
+/target
+**/*.rs.bk
+.env
+
+# dedalo.toml and .dedalo/ are meant to be committed: the funding rules and
+# the payout ledger are part of the project's public record.
+
+# Nix / direnv
+result
+result-*
+.direnv/
+
+# Personal Claude Code settings; .claude/settings.json is the shared one.
+.claude/settings.local.json

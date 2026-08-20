@@ -1,0 +1,8 @@
+# Formatting for TOML: Cargo manifests, dedalo.toml, this file.
+include = ["**/*.toml"]
+
+[formatting]
+align_entries = false
+column_width = 100
+indent_string = "  "
+reorder_keys = false
