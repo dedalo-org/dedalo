@@ -219,6 +219,7 @@ dependencies = [
  "assert_cmd",
  "clap",
  "dedalo-core",
+ "libc",
  "predicates",
  "serde",
  "serde_json",
@@ -235,6 +236,7 @@ name = "dedalo-core"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "dedalo-core",
  "hex",
  "proptest",
  "serde",

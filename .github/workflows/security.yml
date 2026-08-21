@@ -32,6 +32,9 @@ jobs:
           command: check ${{ matrix.check }}
 
   audit:
+    env:
+      # Outranks rust-toolchain.toml, which would otherwise win.
+      RUSTUP_TOOLCHAIN: stable
     timeout-minutes: 10
     name: cargo-audit
     runs-on: ubuntu-latest

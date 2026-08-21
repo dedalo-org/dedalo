@@ -63,6 +63,16 @@
   color: b60205
   description: Highest priority — a payout is or could be incorrect
 
+# --- automation ---------------------------------------------------------------
+# Dependabot applies these itself. They live here so `--prune` adopts them
+# rather than deleting them out from under its open pull requests.
+- name: dependencies
+  color: 0366d6
+  description: Dependency updates, usually opened by Dependabot
+- name: github_actions
+  color: "000000"
+  description: Updates to GitHub Actions workflows
+
 # --- release ----------------------------------------------------------------
 - name: breaking
   color: b60205

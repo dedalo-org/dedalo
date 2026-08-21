@@ -11,6 +11,10 @@ jobs:
   conventional:
     timeout-minutes: 5
     name: conventional commit format
+    # Dependabot writes `chore(deps): Bump x from a to b` — already
+    # conventional, but capitalised, which this check rejects. Its titles are
+    # machine-generated and not ours to restyle, so it is exempt.
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
