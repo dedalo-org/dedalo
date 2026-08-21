@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   deny:
+    timeout-minutes: 15
     name: cargo-deny / ${{ matrix.check }}
     runs-on: ubuntu-latest
     strategy:
@@ -23,16 +24,25 @@ jobs:
       matrix:
         check: [advisories, bans, licenses, sources]
     steps:
-      - uses: actions/checkout@v5
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
         with:
           command: check ${{ matrix.check }}
 
   audit:
+    timeout-minutes: 10
     name: cargo-audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: taiki-e/install-action@cargo-audit
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: stable
+      - uses: taiki-e/install-action@a2a5f6e99e1a31540baa0468acfa302cff0f359f # v2.86.4
+        with:
+          tool: cargo-audit
       - run: cargo audit --deny warnings

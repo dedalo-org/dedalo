@@ -1,6 +1,11 @@
 name: Triage
 
 on:
+  # zizmor: ignore[dangerous-triggers]
+  # Labelling a fork's pull request needs a write token, which `pull_request`
+  # does not grant. This is safe only because no job here checks out, builds,
+  # or executes the pull request's code — it reads the changed file list
+  # through the API and applies labels. Do not add a checkout step.
   pull_request_target:
     types: [opened, synchronize, reopened]
   issues:
@@ -13,6 +18,7 @@ permissions:
 
 jobs:
   label-pull-request:
+    timeout-minutes: 5
     name: label by touched paths
     if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
@@ -20,19 +26,20 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/labeler@v6
+      - uses: actions/labeler@b8dd2d9be0f68b860e7dae5dae7d772984eacd6d # v6
         with:
           configuration-path: .github/labeler.yml
           sync-labels: true
 
   triage-issue:
+    timeout-minutes: 5
     name: mark new issues for triage
     if: github.event_name == 'issues'
     runs-on: ubuntu-latest
     permissions:
       issues: write
     steps:
-      - uses: actions/github-script@v8
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             await github.rest.issues.addLabels({
@@ -43,6 +50,7 @@ jobs:
             });
 
   stale:
+    timeout-minutes: 15
     name: close abandoned threads
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
@@ -50,7 +58,7 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      - uses: actions/stale@v10
+      - uses: actions/stale@1e223db275d687790206a7acac4d1a11bd6fe629 # v10
         with:
           days-before-stale: 60
           days-before-close: 14

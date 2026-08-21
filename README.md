@@ -52,6 +52,22 @@ Stages 1–3 are pure and offline. The same repository and the same
 `dedalo.toml` always produce the same plan id, on any machine — so a plan
 whose id changed is a plan someone tampered with.
 
+### How this is verified
+
+Not claims — gates. `nix flake check` runs all eight locally, exactly as CI
+runs them: workspace build and tests, clippy, rustfmt, the declared MSRV,
+`actionlint` and `zizmor` over every workflow, `shellcheck` over the scripts,
+and the site's structure and metadata.
+
+The test suite is 66 tests in four layers:
+
+| Layer | What it holds down |
+| --- | --- |
+| unit | the arithmetic, parsing and config, next to the code |
+| property (`proptest`) | the money invariants below, over thousands of generated rounds |
+| end-to-end | the library against real repositories with real merge commits |
+| CLI | exit codes and the `--json` shape that `action.yml` parses |
+
 ### Design guarantees
 
 - **No floating point in money.** Every amount is an integer count of base
@@ -256,14 +272,26 @@ cargo doc --workspace --no-deps --open
 cargo run -p dedalo -- --help
 ```
 
+Building on the library? `dedalo-core`'s `testing` feature gives you throwaway
+repositories with real merge history:
+
+```rust
+use dedalo_core::testing::TempRepo;
+
+let repo = TempRepo::new("example");
+repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 40);
+```
+
 ### Infrastructure
 
 | Concern | How |
 | --- | --- |
 | Reproducible builds | `flake.nix` + `rust-toolchain.toml`, one pinned compiler everywhere |
-| CI | `.github/workflows/ci.yml` — fmt, clippy, tests on Linux/macOS/Windows, MSRV, rustdoc, coverage |
+| CI | `.github/workflows/ci.yml` — fmt, clippy, tests on Linux/macOS/Windows, MSRV, rustdoc, coverage, packaging, public-API compatibility |
 | Reproducibility check | `.github/workflows/nix.yml` — `nix flake check` on Linux and macOS |
 | MSRV | verified, not asserted: `flake.nix` builds the workspace with exactly the compiler `rust-version` promises |
+| Workflow safety | `actionlint` and `zizmor` run as flake checks; every third-party action pinned to a commit |
+| Artifact integrity | SHA-256 checksums plus signed build provenance (`gh attestation verify`) |
 | API docs | `.github/workflows/docs.yml` — rustdoc published to GitHub Pages on every push to `main` |
 | Releases | `.github/workflows/release.yml` — tagged builds for five targets, checksums, GitHub release, crates.io |
 | Supply chain | `.github/workflows/security.yml` — `cargo-deny` and `cargo-audit`, weekly and on manifest changes |

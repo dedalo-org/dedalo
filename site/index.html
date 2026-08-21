@@ -10,6 +10,13 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://4137314.github.io/dedalo/">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧭</text></svg>">
+<!-- The page is entirely self-contained: no scripts, no external requests.
+     Saying so explicitly means a future edit that adds one fails loudly. -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
+<meta name="theme-color" content="#fbfaf8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131211" media="(prefers-color-scheme: dark)">
+<link rel="canonical" href="https://4137314.github.io/dedalo/">
 <style>
   :root {
     color-scheme: light dark;
@@ -50,6 +57,26 @@
 
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
+
+  /* Someone who navigates by keyboard has to be able to see where they are. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+  .skip {
+    position: absolute; left: -9999px; top: 0;
+    background: var(--accent); color: var(--accent-fg);
+    padding: 0.6rem 1rem; border-radius: 0 0 var(--radius) 0; z-index: 100;
+  }
+  .skip:focus { left: 0; }
+
+  /* Honour a reduced-motion preference: no smooth scroll, no lift on hover. */
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+    .btn:hover { transform: none; }
+  }
   body {
     margin: 0;
     background: var(--bg);
@@ -62,14 +89,23 @@
   a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
   code, pre, kbd { font-family: var(--mono); }
   .wrap { width: min(100% - 2.5rem, 62rem); margin-inline: auto; }
+  /* A long command or address wraps rather than scrolling the whole page. */
+  pre { overflow-x: auto; }
+  p, li, .install b { overflow-wrap: anywhere; }
 
   /* ---------- header ---------- */
   header {
     border-bottom: 1px solid var(--border);
     position: sticky; top: 0;
-    background: color-mix(in srgb, var(--bg) 88%, transparent);
-    backdrop-filter: blur(8px);
+    /* Opaque by default; the translucent version only where supported. */
+    background: var(--bg);
     z-index: 10;
+  }
+  @supports (backdrop-filter: blur(1px)) and (background: color-mix(in srgb, red 50%, transparent)) {
+    header {
+      background: color-mix(in srgb, var(--bg) 88%, transparent);
+      backdrop-filter: blur(8px);
+    }
   }
   .nav { display: flex; align-items: center; gap: 1.5rem; padding: 0.9rem 0; }
   .brand { font-weight: 700; letter-spacing: -0.02em; font-size: 1.05rem; margin-right: auto; }
@@ -189,8 +225,10 @@
 </head>
 <body>
 
+<a class="skip" href="#main">Skip to content</a>
+
 <header>
-  <nav class="nav wrap">
+  <nav class="nav wrap" aria-label="Primary">
     <div class="brand">Ded<span>alo</span></div>
     <a href="#how">How it works</a>
     <a href="#guarantees" class="hide-sm">Guarantees</a>
@@ -200,7 +238,7 @@
   </nav>
 </header>
 
-<main>
+<main id="main">
   <div class="wrap hero">
     <span class="tag">Rust · git-native · early</span>
     <h1>Turn code merges into sustainable open-source funding.</h1>
@@ -216,8 +254,8 @@
       <a class="btn" href="https://github.com/4137314/dedalo">Source on GitHub</a>
     </div>
 
-    <div class="term">
-      <div class="term-bar">
+    <figure class="term" role="group" aria-label="Example output of dedalo plan">
+      <div class="term-bar" aria-hidden="true">
         <span class="dot"></span><span class="dot"></span><span class="dot"></span>
         <span class="term-title">dedalo plan --amount 1000</span>
       </div>
@@ -240,11 +278,11 @@ demo-collective  <span class="m">protocol</span>     0x33333333333…   2.50%   
   Cy &lt;cy@example.com&gt;  140 points
   <span class="c">their share was redistributed; link them with `dedalo identity link`</span>
 </pre>
-    </div>
+    </figure>
   </div>
 
-  <section id="how" class="wrap">
-    <h2>Four stages, one boundary that matters</h2>
+  <section id="how" class="wrap" aria-labelledby="how-title">
+    <h2 id="how-title">Four stages, one boundary that matters</h2>
     <p class="sub">
       Everything that decides <em>who gets what</em> happens offline and
       deterministically. Only the last stage touches the outside world.
@@ -281,7 +319,7 @@ demo-collective  <span class="m">protocol</span>     0x33333333333…   2.50%   
   <section id="split" class="wrap">
     <h2>Where a round goes</h2>
     <p class="sub">Every round is cut in a fixed order, and the numbers are yours to set.</p>
-    <div class="split">
+    <div class="split" role="img" aria-label="82.5 percent to contributors, 15 percent to the project treasury, 2.5 percent protocol fee">
       <div class="s-contrib">contributors</div>
       <div class="s-treas">treasury</div>
       <div class="s-proto">fee</div>
