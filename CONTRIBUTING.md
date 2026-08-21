@@ -25,6 +25,27 @@ cargo fmt --all
 `nix flake check` runs all of the above the way CI does. If it passes locally,
 CI will pass.
 
+## Branches and commit messages
+
+`main` is always releasable, and every change lands through a pull request.
+Work on short-lived branches named for what they do — `feat/…`, `fix/…`,
+`docs/…`, `ci/…` — and delete them once merged.
+
+Pull request titles follow [Conventional Commits](https://www.conventionalcommits.org)
+and are checked automatically. Because pull requests are squash merged, **the
+title becomes the changelog entry**, so write it for a reader of the release
+notes:
+
+```
+feat(cli): add `dedalo identity export`
+fix(money): keep dust with contributors when a weight is zero
+docs: explain how the protocol fee funds the network
+```
+
+Anything that changes what people are paid — amounts, plan ids, the fee split —
+is a breaking change even when it compiles. Say so with `BREAKING CHANGE:` in
+the body. [RELEASING.md](RELEASING.md) has the full policy.
+
 ## What a good pull request looks like
 
 - **One concern per PR.** A refactor and a behaviour change in the same diff

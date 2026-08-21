@@ -1,0 +1,49 @@
+name: Tag
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    name: tag the merged release
+    # Only a merged pull request that the Version workflow labelled.
+    if: >
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Read the version that was merged
+        id: version
+        run: |
+          version=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse to move an existing tag
+        run: |
+          tag="v${{ steps.version.outputs.version }}"
+          if git rev-parse "$tag" >/dev/null 2>&1; then
+            echo "$tag already exists; a published release must never move" >&2
+            exit 1
+          fi
+
+      - name: Create and push the tag
+        env:
+          TAG: v${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+          echo "Pushed $TAG" >> "$GITHUB_STEP_SUMMARY"

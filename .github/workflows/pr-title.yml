@@ -1,0 +1,52 @@
+name: PR title
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  conventional:
+    name: conventional commit format
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      # Squash-merged PR titles become commit subjects, and the changelog is
+      # generated from them — so the title is the release note.
+      - uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            docs
+            test
+            build
+            ci
+            chore
+            revert
+          scopes: |
+            core
+            cli
+            money
+            attribution
+            git
+            settlement
+            ledger
+            config
+            docs
+            nix
+            ci
+            release
+          requireScope: false
+          subjectPattern: ^(?![A-Z])(?!.*\.$).+$
+          subjectPatternError: |
+            The subject "{subject}" is not in the expected format: start
+            lowercase and do not end with a period, e.g.
+            `fix(money): conserve dust when weights are zero`.

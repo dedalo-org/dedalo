@@ -1,0 +1,69 @@
+name: Triage
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  issues:
+    types: [opened]
+  schedule:
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  label-pull-request:
+    name: label by touched paths
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/labeler@v6
+        with:
+          configuration-path: .github/labeler.yml
+          sync-labels: true
+
+  triage-issue:
+    name: mark new issues for triage
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['needs triage'],
+            });
+
+  stale:
+    name: close abandoned threads
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/stale@v10
+        with:
+          days-before-stale: 60
+          days-before-close: 14
+          stale-issue-message: >
+            This has been quiet for 60 days. Comment if it is still relevant,
+            otherwise it will close in two weeks. Closing is not a judgement —
+            reopen any time.
+          stale-pr-message: >
+            This pull request has been quiet for 60 days. Push a commit or
+            comment to keep it open; it will close in two weeks otherwise.
+          stale-issue-label: stale
+          stale-pr-label: stale
+          # Nothing that could affect a payout ages out silently.
+          exempt-issue-labels: "blocked,security,pays wrong amount,help wanted,good first issue"
+          exempt-pr-labels: "blocked,security,pays wrong amount"
+          exempt-all-milestones: true

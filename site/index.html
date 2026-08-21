@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dedalo — merge-to-earn funding for open source</title>
+<meta name="description" content="Dedalo turns git merges into deterministic, auditable contributor payouts. Written in Rust, driven by your own repository history.">
+<meta property="og:title" content="Dedalo">
+<meta property="og:description" content="Turn code merges into sustainable open-source funding.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://4137314.github.io/dedalo/">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧭</text></svg>">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fbfaf8;
+    --bg-raised: #ffffff;
+    --bg-sunken: #f2f0ec;
+    --fg: #1c1a17;
+    --fg-muted: #5f5a52;
+    --fg-faint: #8c867c;
+    --border: #e2ded6;
+    --accent: #6b4bd6;
+    --accent-fg: #ffffff;
+    --money: #1f7a4d;
+    --warn: #9a6212;
+    --term-bg: #1a1815;
+    --term-fg: #e8e3da;
+    --radius: 10px;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #131211;
+      --bg-raised: #1b1a18;
+      --bg-sunken: #0e0d0c;
+      --fg: #ece8e1;
+      --fg-muted: #a8a299;
+      --fg-faint: #75706a;
+      --border: #2b2926;
+      --accent: #a68bff;
+      --accent-fg: #17141f;
+      --money: #5fcf95;
+      --warn: #e0a851;
+      --term-bg: #0b0a09;
+      --term-fg: #e8e3da;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  code, pre, kbd { font-family: var(--mono); }
+  .wrap { width: min(100% - 2.5rem, 62rem); margin-inline: auto; }
+
+  /* ---------- header ---------- */
+  header {
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(8px);
+    z-index: 10;
+  }
+  .nav { display: flex; align-items: center; gap: 1.5rem; padding: 0.9rem 0; }
+  .brand { font-weight: 700; letter-spacing: -0.02em; font-size: 1.05rem; margin-right: auto; }
+  .brand span { color: var(--accent); }
+  .nav a { color: var(--fg-muted); text-decoration: none; font-size: 0.9rem; }
+  .nav a:hover { color: var(--fg); }
+  @media (max-width: 40rem) { .nav a.hide-sm { display: none; } }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 4.5rem 0 3rem; }
+  .tag {
+    display: inline-block; font-family: var(--mono); font-size: 0.75rem;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--accent); border: 1px solid var(--border);
+    border-radius: 100px; padding: 0.2rem 0.7rem; margin-bottom: 1.4rem;
+  }
+  h1 {
+    font-size: clamp(2.1rem, 6vw, 3.4rem); line-height: 1.1;
+    letter-spacing: -0.035em; margin: 0 0 1rem; font-weight: 700;
+  }
+  .lede { font-size: clamp(1.05rem, 2.4vw, 1.25rem); color: var(--fg-muted); max-width: 42rem; margin: 0 0 2rem; }
+  .cta { display: flex; flex-wrap: wrap; gap: 0.7rem; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    padding: 0.6rem 1.1rem; border-radius: var(--radius);
+    font-size: 0.92rem; font-weight: 550; text-decoration: none;
+    border: 1px solid var(--border); color: var(--fg); background: var(--bg-raised);
+    transition: transform 0.12s ease, border-color 0.12s ease;
+  }
+  .btn:hover { transform: translateY(-1px); border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+
+  /* ---------- terminal ---------- */
+  .term {
+    background: var(--term-bg); color: var(--term-fg);
+    border-radius: var(--radius); border: 1px solid var(--border);
+    margin: 2.5rem 0; overflow: hidden;
+  }
+  .term-bar {
+    display: flex; align-items: center; gap: 0.45rem;
+    padding: 0.6rem 0.9rem; border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #4a4540; }
+  .term-title { margin-left: 0.6rem; font-family: var(--mono); font-size: 0.75rem; color: #8c867c; }
+  .term pre {
+    margin: 0; padding: 1.1rem 1.2rem; overflow-x: auto;
+    font-size: 0.82rem; line-height: 1.75;
+  }
+  .term .c { color: #8c867c; }
+  .term .p { color: #a68bff; }
+  .term .m { color: #5fcf95; }
+  .term .w { color: #e0a851; }
+
+  /* ---------- sections ---------- */
+  section { padding: 3.5rem 0; border-top: 1px solid var(--border); }
+  h2 { font-size: clamp(1.4rem, 3.2vw, 1.9rem); letter-spacing: -0.025em; margin: 0 0 0.6rem; }
+  .sub { color: var(--fg-muted); max-width: 44rem; margin: 0 0 2rem; }
+
+  /* ---------- pipeline ---------- */
+  .pipe { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; margin-bottom: 1.2rem; }
+  @media (max-width: 46rem) { .pipe { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 26rem) { .pipe { grid-template-columns: 1fr; } }
+  .stage {
+    background: var(--bg-raised); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1rem;
+  }
+  .stage b { display: block; font-family: var(--mono); font-size: 0.78rem; color: var(--accent); margin-bottom: 0.35rem; }
+  .stage h3 { margin: 0 0 0.3rem; font-size: 0.98rem; }
+  .stage p { margin: 0; font-size: 0.86rem; color: var(--fg-muted); line-height: 1.55; }
+  .pipe-note {
+    font-size: 0.85rem; color: var(--fg-muted); background: var(--bg-sunken);
+    border-left: 2px solid var(--accent); border-radius: 0 6px 6px 0; padding: 0.7rem 0.95rem;
+  }
+
+  /* ---------- guarantees ---------- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 0.9rem; }
+  .card { background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.15rem; }
+  .card h3 { margin: 0 0 0.4rem; font-size: 0.97rem; display: flex; align-items: center; gap: 0.45rem; }
+  .card h3::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--money); flex: none; }
+  .card p { margin: 0; font-size: 0.87rem; color: var(--fg-muted); line-height: 1.6; }
+
+  /* ---------- split visual ---------- */
+  .split { display: flex; height: 2.4rem; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); margin: 1.2rem 0 0.7rem; }
+  .split div { display: flex; align-items: center; justify-content: center; font-size: 0.76rem; font-family: var(--mono); color: var(--accent-fg); }
+  .s-contrib { flex: 82.5; background: var(--accent); }
+  .s-treas { flex: 15; background: var(--money); }
+  .s-proto { flex: 2.5; background: var(--warn); min-width: 3.5rem; }
+  .legend { display: flex; flex-wrap: wrap; gap: 1.2rem; font-size: 0.82rem; color: var(--fg-muted); }
+  .legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 0.4rem; }
+  .l1::before { background: var(--accent); }
+  .l2::before { background: var(--money); }
+  .l3::before { background: var(--warn); }
+
+  /* ---------- install ---------- */
+  .tabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0.9rem; }
+  .install { background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.1rem; }
+  .install b { font-size: 0.83rem; color: var(--fg-faint); font-family: var(--mono); }
+  .install pre { margin: 0.5rem 0 0; font-size: 0.8rem; overflow-x: auto; color: var(--fg); }
+
+  /* ---------- status ---------- */
+  .status { background: var(--bg-sunken); border: 1px solid var(--border); border-left: 3px solid var(--warn); border-radius: var(--radius); padding: 1.2rem 1.3rem; }
+  .status h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+  .status p { margin: 0 0 0.6rem; font-size: 0.9rem; color: var(--fg-muted); }
+  .status p:last-child { margin-bottom: 0; }
+  ul.check { list-style: none; padding: 0; margin: 1.2rem 0 0; display: grid; gap: 0.4rem; }
+  ul.check li { font-size: 0.89rem; color: var(--fg-muted); padding-left: 1.6rem; position: relative; }
+  ul.check li::before { position: absolute; left: 0; font-family: var(--mono); }
+  li.done::before { content: "✓"; color: var(--money); }
+  li.todo::before { content: "○"; color: var(--fg-faint); }
+
+  footer { border-top: 1px solid var(--border); padding: 2.5rem 0 3.5rem; color: var(--fg-faint); font-size: 0.85rem; }
+  .foot { display: flex; flex-wrap: wrap; gap: 1.2rem; align-items: center; }
+  .foot a { color: var(--fg-muted); text-decoration: none; }
+  .foot a:hover { color: var(--accent); }
+  .foot .sep { margin-left: auto; }
+</style>
+</head>
+<body>
+
+<header>
+  <nav class="nav wrap">
+    <div class="brand">Ded<span>alo</span></div>
+    <a href="#how">How it works</a>
+    <a href="#guarantees" class="hide-sm">Guarantees</a>
+    <a href="#install">Install</a>
+    <a href="api/">API docs</a>
+    <a href="https://github.com/4137314/dedalo">GitHub</a>
+  </nav>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <span class="tag">Rust · git-native · early</span>
+    <h1>Turn code merges into sustainable open-source funding.</h1>
+    <p class="lede">
+      Dedalo reads merge history straight from your repository, scores who
+      contributed what, and distributes a funding round to contributor wallets —
+      taking a protocol fee that flows to the network's Open Collective, so the
+      network funds itself instead of depending on grants.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="#install">Get started</a>
+      <a class="btn" href="api/">Read the API docs</a>
+      <a class="btn" href="https://github.com/4137314/dedalo">Source on GitHub</a>
+    </div>
+
+    <div class="term">
+      <div class="term-bar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="term-title">dedalo plan --amount 1000</span>
+      </div>
+<pre><span class="c">$</span> dedalo plan --amount 1000
+
+<span class="p">Round</span> ded106bd7281  <span class="c">2 merges on main → af3141b5</span>
+<span class="p">Gross</span> 1000 USDC
+
+PAYEE            KIND         WALLET           SHARE  AMOUNT
+ada              contributor  0xAdA00000000…  41.25%   412.5
+bea              contributor  0xBeA00000000…  41.25%   412.5
+treasury         treasury     0x22222222222…  15.00%     150
+demo-collective  <span class="m">protocol</span>     0x33333333333…   2.50%      25
+
+  contributors               825 USDC
+  treasury                   150 USDC
+  protocol fee                25 USDC  <span class="c">→ open collective</span>
+
+<span class="w">warning:</span> 1 contributor earned a share but has no wallet:
+  Cy &lt;cy@example.com&gt;  140 points
+  <span class="c">their share was redistributed; link them with `dedalo identity link`</span>
+</pre>
+    </div>
+  </div>
+
+  <section id="how" class="wrap">
+    <h2>Four stages, one boundary that matters</h2>
+    <p class="sub">
+      Everything that decides <em>who gets what</em> happens offline and
+      deterministically. Only the last stage touches the outside world.
+    </p>
+    <div class="pipe">
+      <div class="stage">
+        <b>01 · git</b>
+        <h3>Read the merges</h3>
+        <p>Merge commits on your branch, the commits each one introduced, and its diff against the mainline. No separate database of contributions.</p>
+      </div>
+      <div class="stage">
+        <b>02 · attribution</b>
+        <h3>Score the work</h3>
+        <p>Integer weights from rules you declare: a flat score per merged PR, per-line scoring, a cap so one vendored dependency cannot drain a round, and <code>Co-authored-by:</code> splitting.</p>
+      </div>
+      <div class="stage">
+        <b>03 · payout</b>
+        <h3>Build the plan</h3>
+        <p>Fees off the top, the rest split by weight, contributors resolved to wallets. The result is content-addressed — reviewable in a pull request.</p>
+      </div>
+      <div class="stage">
+        <b>04 · settlement</b>
+        <h3>Execute it</h3>
+        <p>A backend re-verifies the plan and broadcasts it. Nothing moves unless you ask for it explicitly.</p>
+      </div>
+    </div>
+    <p class="pipe-note">
+      Stages 1–3 are pure. The same repository and the same <code>dedalo.toml</code>
+      always produce the same plan id, on any machine — so a plan whose id changed
+      is a plan someone tampered with.
+    </p>
+  </section>
+
+  <section id="split" class="wrap">
+    <h2>Where a round goes</h2>
+    <p class="sub">Every round is cut in a fixed order, and the numbers are yours to set.</p>
+    <div class="split">
+      <div class="s-contrib">contributors</div>
+      <div class="s-treas">treasury</div>
+      <div class="s-proto">fee</div>
+    </div>
+    <div class="legend">
+      <span class="l1"><strong>82.5%</strong> — contributors, by attribution weight</span>
+      <span class="l2"><strong>15%</strong> — your project's own reserve</span>
+      <span class="l3"><strong>2.5%</strong> — protocol fee to the network's Open Collective</span>
+    </div>
+  </section>
+
+  <section id="guarantees" class="wrap">
+    <h2>What the code guarantees</h2>
+    <p class="sub">These are the reasons a payout can be trusted. Each one is enforced by tests.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>No floating point in money</h3>
+        <p>Every amount is an integer count of base units. Percentages are basis points. Nothing rounds by accident.</p>
+      </div>
+      <div class="card">
+        <h3>Splits conserve the total</h3>
+        <p>Largest-remainder distribution: a round always sums back to exactly what you funded. No dust created, none stranded.</p>
+      </div>
+      <div class="card">
+        <h3>Fees round down</h3>
+        <p>Rounding remainders land in the contributor pool, never in the protocol's pocket.</p>
+      </div>
+      <div class="card">
+        <h3>One wallet, one transfer</h3>
+        <p>A contributor with several git emails is paid once, so a batch cannot double-send.</p>
+      </div>
+      <div class="card">
+        <h3>Nobody is silently dropped</h3>
+        <p>Someone who earned a share but has no wallet on file is reported in the plan, not quietly removed.</p>
+      </div>
+      <div class="card">
+        <h3>Rounds are idempotent</h3>
+        <p>The ledger refuses to settle the same plan twice, so a retried CI job cannot pay twice.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="install" class="wrap">
+    <h2>Install</h2>
+    <p class="sub">Every archive ships a SHA-256 checksum, and the installer refuses to run without verifying it.</p>
+    <div class="tabs">
+      <div class="install">
+        <b>script</b>
+<pre>curl -fsSL https://raw.githubusercontent.com/\
+4137314/dedalo/main/install.sh | sh</pre>
+      </div>
+      <div class="install">
+        <b>cargo</b>
+<pre>cargo install dedalo --locked
+# or, without compiling:
+cargo binstall dedalo</pre>
+      </div>
+      <div class="install">
+        <b>nix</b>
+<pre>nix run github:4137314/dedalo -- status</pre>
+      </div>
+      <div class="install">
+        <b>container</b>
+<pre>docker run --rm -v "$PWD:/repo" \
+  ghcr.io/4137314/dedalo plan --amount 1000</pre>
+      </div>
+    </div>
+
+    <h2 style="margin-top:2.5rem">Or run it in CI</h2>
+    <p class="sub">Dedalo ships as a GitHub Action, because a payout belongs in the pipeline that merged the code.</p>
+    <div class="install">
+      <b>.github/workflows/payouts.yml</b>
+<pre>- uses: actions/checkout@v5
+  with:
+    fetch-depth: 0        # attribution needs the full history
+
+- uses: 4137314/dedalo@v1
+  with:
+    command: plan
+    amount: "1000"</pre>
+    </div>
+  </section>
+
+  <section id="status" class="wrap">
+    <h2>Project status</h2>
+    <div class="status">
+      <h3>On-chain broadcasting is not live yet.</h3>
+      <p>
+        The pipeline from git history to a verified, reproducible payout plan is
+        implemented and tested end to end. The <code>evm</code> backend validates
+        its configuration, re-verifies the plan and builds the exact distributor
+        call — then stops before signing.
+      </p>
+      <p>
+        Shipping an unaudited signing path would put real funds at risk. Until the
+        distributor contract is deployed and audited, use the default
+        <code>dry-run</code> backend: identical numbers, minus the broadcast.
+      </p>
+    </div>
+    <ul class="check">
+      <li class="done">Git-derived attribution with co-author support</li>
+      <li class="done">Deterministic, content-addressed payout plans</li>
+      <li class="done">Fee schedule with protocol / treasury / contributor split</li>
+      <li class="done">Append-only ledger with idempotent rounds</li>
+      <li class="done">GitHub Action, container image, signed-checksum releases</li>
+      <li class="todo">Audited distributor contract and EVM broadcasting</li>
+      <li class="todo">Review-weighted attribution — reviewers earn too</li>
+    </ul>
+  </section>
+
+  <section id="contribute" class="wrap">
+    <h2>Contributing pays</h2>
+    <p class="sub">
+      Dedalo is open source, MIT licensed, and built by the community. If you care
+      about Rust, developer tooling and sustainable open-source economics,
+      contributions are welcome — and they are literally what the project pays out
+      for.
+    </p>
+    <div class="cta">
+      <a class="btn" href="https://github.com/4137314/dedalo/blob/main/CONTRIBUTING.md">Contributing guide</a>
+      <a class="btn" href="https://github.com/4137314/dedalo/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22">Good first issues</a>
+      <a class="btn" href="https://github.com/4137314/dedalo/blob/main/SECURITY.md">Security policy</a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <span>MIT licensed</span>
+    <a href="https://github.com/4137314/dedalo">GitHub</a>
+    <a href="api/">API reference</a>
+    <a href="https://crates.io/crates/dedalo">crates.io</a>
+    <a href="https://github.com/4137314/dedalo/blob/main/CHANGELOG.md">Changelog</a>
+    <span class="sep">Built with Rust 🦀</span>
+  </div>
+</footer>
+
+</body>
+</html>

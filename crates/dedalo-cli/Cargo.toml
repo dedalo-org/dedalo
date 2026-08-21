@@ -10,6 +10,16 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+# `cargo binstall dedalo` fetches the release archive instead of compiling.
+# The layout below must match what .github/workflows/release.yml publishes.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/dedalo-v{ version }-{ target }{ archive-suffix }"
+bin-dir = "dedalo-v{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+
 [[bin]]
 name = "dedalo"
 path = "src/main.rs"

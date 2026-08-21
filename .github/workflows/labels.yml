@@ -1,0 +1,26 @@
+name: Labels
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/labels.yml", ".github/workflows/labels.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync:
+    name: sync label taxonomy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: micnncim/action-label-syncer@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          manifest: .github/labels.yml
+          # Labels removed from the manifest are removed from the repository,
+          # so the file stays the single source of truth.
+          prune: true
