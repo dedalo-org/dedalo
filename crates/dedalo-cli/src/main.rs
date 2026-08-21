@@ -9,8 +9,28 @@ use clap::Parser;
 
 use cli::{Cli, Command};
 
+/// Restore the default disposition for `SIGPIPE`.
+///
+/// Rust ignores `SIGPIPE` at startup, so writing to a closed pipe returns an
+/// error that `println!` unwraps into a panic. That turns the ordinary
+/// `dedalo scan | head` into a crash with a backtrace. Every unix tool is
+/// expected to die quietly when its reader walks away, so restore that.
+#[cfg(unix)]
+fn restore_sigpipe() {
+    // SAFETY: resetting a signal to its default disposition is always sound,
+    // and this runs before any thread or async task exists.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+}
+
+#[cfg(not(unix))]
+fn restore_sigpipe() {}
+
 #[tokio::main]
 async fn main() {
+    restore_sigpipe();
+
     let cli = Cli::parse();
     init_tracing(cli.verbose);
 

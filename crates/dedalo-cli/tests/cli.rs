@@ -341,6 +341,43 @@ fn an_empty_range_is_an_empty_round_not_an_error() {
         .stdout(contains("No contributions"));
 }
 
+/// `dedalo scan | head` is an ordinary thing to type. Rust ignores SIGPIPE by
+/// default, which used to turn it into a panic with a backtrace.
+#[cfg(unix)]
+#[test]
+fn closing_the_pipe_early_does_not_panic() {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command as StdCommand, Stdio};
+
+    let repo = project();
+    let exe = assert_cmd::cargo::cargo_bin("dedalo");
+
+    let mut child = StdCommand::new(exe)
+        .arg("-C")
+        .arg(repo.path())
+        .args(["--json", "scan"])
+        .env("NO_COLOR", "1")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("dedalo must start");
+
+    // Read one line, then drop the pipe while the child is still writing.
+    {
+        let stdout = child.stdout.take().expect("piped");
+        let mut reader = BufReader::new(stdout);
+        let mut line = String::new();
+        let _ = reader.read_line(&mut line);
+    }
+
+    let output = child.wait_with_output().expect("dedalo must exit");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("panicked"),
+        "a closed pipe must not panic:\n{stderr}"
+    );
+}
+
 #[test]
 fn help_and_version_work_without_a_project() {
     Command::cargo_bin("dedalo")

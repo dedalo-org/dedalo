@@ -20,7 +20,10 @@ FROM alpine:3.22
 RUN apk add --no-cache git ca-certificates tini \
     && adduser -D -u 10001 dedalo
 
-ARG TARGETARCH
+# buildx sets TARGETARCH per platform; plain `docker build` does not set it at
+# all, which made the local instructions above fail. The default keeps a
+# single-arch build working, and buildx still overrides it.
+ARG TARGETARCH=amd64
 COPY image/${TARGETARCH}/dedalo /usr/local/bin/dedalo
 RUN chmod 0755 /usr/local/bin/dedalo && dedalo --version
 

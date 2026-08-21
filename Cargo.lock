@@ -219,6 +219,7 @@ dependencies = [
  "assert_cmd",
  "clap",
  "dedalo-core",
+ "libc",
  "predicates",
  "serde",
  "serde_json",
