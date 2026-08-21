@@ -218,10 +218,27 @@ jobs:
       - name: The image runs against a mounted repository
         run: |
           set -euo pipefail
+
           docker run --rm dedalo:ci --version
+
+          # Read-only, as the image's own non-root user, against a checkout it
+          # does not own. This is what trips git's safe.directory guard if the
+          # image forgets to set it.
           docker run --rm -v "$PWD:/repo:ro" dedalo:ci scan --limit 1
-          # A repository owned by another user must not trip git's safety check.
-          docker run --rm -v "$PWD:/repo:ro" dedalo:ci --json scan | head -c 200
+          docker run --rm -v "$PWD:/repo:ro" dedalo:ci --json contributors > /dev/null
+
+          # The write path needs the caller's uid, since a host checkout is not
+          # owned by the image's user. If this breaks, `dedalo init` in a
+          # container is broken, which is most of the point of shipping one.
+          work=$(mktemp -d)
+          git clone --quiet "$PWD" "$work/repo"
+          docker run --rm -u "$(id -u):$(id -g)" -v "$work/repo:/repo" \
+            dedalo:ci init --name container-smoke --force
+          docker run --rm -u "$(id -u):$(id -g)" -v "$work/repo:/repo" \
+            dedalo:ci plan --amount 1000 --save
+          test -f "$work/repo/.dedalo/ledger.jsonl" \
+            || { echo "::error title=Image cannot write::plan --save left no ledger"; exit 1; }
+          echo "container writes to a mounted repository as the calling user"
 
       - name: install.sh fails safely on a version that does not exist
         run: |
