@@ -15,7 +15,7 @@ dedalo-core = { path = "crates/dedalo-core", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.9"
-toml_edit = "0.23"
+toml_edit = "0.25"
 thiserror = "2"
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
