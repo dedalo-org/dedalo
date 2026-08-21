@@ -82,7 +82,10 @@ pub fn contributors(engine: &Engine, args: &RangeArgs, json: bool) -> Result<()>
     for contribution in attribution.contributions.iter().take(limit) {
         let wallet = match identities.resolve(&contribution.author) {
             Some(identity) if identity.excluded => ui::dim("excluded"),
-            Some(identity) => ui::truncate(&identity.wallet, 12),
+            Some(identity) => identity
+                .wallet
+                .as_ref()
+                .map_or_else(|| ui::yellow("no wallet"), |w| ui::truncate(w.as_str(), 12)),
             None => ui::yellow("no wallet"),
         };
         table.push(vec![

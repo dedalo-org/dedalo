@@ -33,6 +33,7 @@ use crate::config::SettlementConfig;
 use crate::error::{Error, Result};
 use crate::money::{Amount, Asset};
 use crate::payout::PayoutPlan;
+use crate::wallet::Address;
 
 /// Settlement through a distributor contract on an EVM chain.
 #[derive(Debug, Clone)]
@@ -122,8 +123,8 @@ pub struct CallArguments {
     pub contract: String,
     /// Chain the call targets.
     pub chain_id: u64,
-    /// Recipient addresses, in plan order.
-    pub payees: Vec<String>,
+    /// Recipient addresses, in plan order, checksummed.
+    pub payees: Vec<Address>,
     /// Amounts, positionally matched to `payees`.
     pub amounts: Vec<Amount>,
 }
@@ -180,7 +181,7 @@ mod tests {
             backend: "evm".into(),
             rpc_url: Some("https://mainnet.base.org".into()),
             chain_id: Some(8453),
-            contract: Some("0xdistributor".into()),
+            contract: Some("0x4444444444444444444444444444444444444444".into()),
             signer_env: "DEDALO_TEST_SIGNER".into(),
         }
     }

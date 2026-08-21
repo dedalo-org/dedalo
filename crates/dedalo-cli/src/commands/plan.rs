@@ -86,7 +86,7 @@ pub fn print_plan(engine: &Engine, plan: &PayoutPlan) {
         table.push(vec![
             ui::truncate(&item.handle, 24),
             kind,
-            ui::truncate(&item.wallet, 14),
+            ui::truncate(item.wallet.as_str(), 14),
             ui::format_bps(item.share_bps),
             asset.format_amount(item.amount),
         ]);
@@ -125,6 +125,20 @@ pub fn print_plan(engine: &Engine, plan: &PayoutPlan) {
         ))
     );
 
+    if !plan.undistributed.is_zero() {
+        println!();
+        println!(
+            "{} {} {} of the contributor pool has no destination and will stay in the",
+            ui::yellow("undistributed:"),
+            asset.format_amount(plan.undistributed),
+            asset.symbol
+        );
+        println!(
+            "  source wallet. {}",
+            ui::dim("every contributor in this round is missing a wallet")
+        );
+    }
+
     if !plan.unresolved.is_empty() {
         println!();
         let unpaid: Vec<_> = plan
@@ -146,9 +160,16 @@ pub fn print_plan(engine: &Engine, plan: &PayoutPlan) {
                     ui::format_score(entry.score)
                 );
             }
+            // Only true when somebody was left to receive it.
+            let fate = if plan.undistributed.is_zero() {
+                "their share went to the contributors who do have one"
+            } else {
+                "nobody in this round has a wallet, so their share went nowhere"
+            };
+            println!("  {}", ui::dim(fate));
             println!(
                 "  {}",
-                ui::dim("their share was redistributed; link them with `dedalo identity link`")
+                ui::dim("link them with `dedalo identity link <handle> <wallet> --email <email>`")
             );
         }
     }

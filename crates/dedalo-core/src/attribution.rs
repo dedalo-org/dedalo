@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::{Error, Result};
 use crate::git::{Author, MergeEvent};
 
 /// How much a merge is worth, and to whom.
@@ -53,13 +54,54 @@ impl AttributionPolicy {
         (value * MILLI as f64).round() as u128
     }
 
+    /// Largest weight a single line may carry, in points.
+    ///
+    /// The config takes a float, and TOML will happily hold `1e300`. Without
+    /// a ceiling, a large diff multiplied by a large weight overflows `u128`
+    /// — panicking in a debug build and, worse, wrapping to a small number in
+    /// a release one, which silently rewrites everyone's share.
+    pub const MAX_LINE_WEIGHT: f64 = 1_000_000.0;
+
     /// Total milli-points a merge is worth, before splitting between people.
+    ///
+    /// Saturating rather than wrapping: a score that has hit the ceiling is
+    /// wrong, but it is visibly, boringly wrong. A wrapped one looks
+    /// plausible and pays the wrong people.
     pub fn merge_score(&self, merge: &MergeEvent) -> u128 {
-        let raw = self.base_points as u128 * MILLI
-            + merge.diff.insertions as u128 * Self::milli(self.points_per_insertion)
-            + merge.diff.deletions as u128 * Self::milli(self.points_per_deletion);
-        let cap = self.max_points_per_merge as u128 * MILLI;
+        let raw = (self.base_points as u128)
+            .saturating_mul(MILLI)
+            .saturating_add(
+                (merge.diff.insertions as u128)
+                    .saturating_mul(Self::milli(self.points_per_insertion)),
+            )
+            .saturating_add(
+                (merge.diff.deletions as u128)
+                    .saturating_mul(Self::milli(self.points_per_deletion)),
+            );
+        let cap = (self.max_points_per_merge as u128).saturating_mul(MILLI);
         if cap == 0 { raw } else { raw.min(cap) }
+    }
+
+    /// Reject weights that would make scoring meaningless or unstable.
+    pub fn validate(&self) -> Result<()> {
+        for (name, value) in [
+            ("points_per_insertion", self.points_per_insertion),
+            ("points_per_deletion", self.points_per_deletion),
+        ] {
+            if !value.is_finite() || value < 0.0 {
+                return Err(Error::config(format!(
+                    "attribution.{name} must be a finite, non-negative number (found {value})"
+                )));
+            }
+            if value > Self::MAX_LINE_WEIGHT {
+                return Err(Error::config(format!(
+                    "attribution.{name} is {value}, above the {} ceiling; a weight that \
+                     large makes a single merge outweigh every other",
+                    Self::MAX_LINE_WEIGHT
+                )));
+            }
+        }
+        Ok(())
     }
 }
 

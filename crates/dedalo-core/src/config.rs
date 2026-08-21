@@ -9,6 +9,7 @@ use crate::error::{Error, Result};
 use crate::identity::{Identity, IdentityMap};
 use crate::money::Asset;
 use crate::treasury::FeeSchedule;
+use crate::wallet::Address;
 
 /// Name of the config file, looked up from the working directory upwards.
 pub const CONFIG_FILE: &str = "dedalo.toml";
@@ -83,12 +84,12 @@ impl Default for GitConfig {
 #[serde(deny_unknown_fields)]
 pub struct Wallets {
     /// Funds the round is paid out of.
-    pub source: String,
+    pub source: Address,
     /// Long-term project reserve.
-    pub treasury: String,
+    pub treasury: Address,
     /// Open Collective wallet that receives the protocol fee. This is how the
     /// network sustains itself and funds the projects on it.
-    pub open_collective: String,
+    pub open_collective: Address,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -142,9 +143,12 @@ impl Config {
             },
             fees: FeeSchedule::default(),
             wallets: Wallets {
-                source: "0x0000000000000000000000000000000000000000".into(),
-                treasury: "0x0000000000000000000000000000000000000000".into(),
-                open_collective: "0x0000000000000000000000000000000000000000".into(),
+                source: Address::parse(crate::wallet::ZERO_ADDRESS)
+                    .expect("the zero address is valid"),
+                treasury: Address::parse(crate::wallet::ZERO_ADDRESS)
+                    .expect("the zero address is valid"),
+                open_collective: Address::parse(crate::wallet::ZERO_ADDRESS)
+                    .expect("the zero address is valid"),
             },
             settlement: SettlementConfig::default(),
             identities: Vec::new(),
@@ -200,6 +204,7 @@ impl Config {
             return Err(Error::config("asset.decimals is unrealistically large"));
         }
         self.fees.validate()?;
+        self.attribution.validate()?;
         if self.git.branch.trim().is_empty() {
             return Err(Error::config("git.branch must not be empty"));
         }
@@ -207,7 +212,7 @@ impl Config {
             if identity.handle.trim().is_empty() {
                 return Err(Error::config("every identity needs a handle"));
             }
-            if identity.wallet.trim().is_empty() && !identity.excluded {
+            if identity.wallet.is_none() && !identity.excluded {
                 return Err(Error::config(format!(
                     "identity `{}` has no wallet; set one or mark it excluded",
                     identity.handle
@@ -253,7 +258,7 @@ mod tests {
         let mut config = Config::template("dedalo");
         config.identities.push(Identity {
             handle: "ada".into(),
-            wallet: String::new(),
+            wallet: None,
             emails: vec!["ada@example.com".into()],
             excluded: false,
         });

@@ -21,6 +21,9 @@ pub const LEDGER_FILE: &str = "ledger.jsonl";
 /// JSON file holding the payout cursor.
 pub const STATE_FILE: &str = "state.json";
 
+/// Exclusive lock held while a round is being settled.
+pub const LOCK_FILE: &str = "settling.lock";
+
 /// One recorded event.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "kebab-case")]
@@ -169,8 +172,18 @@ impl Ledger {
     }
 
     /// Where a given plan is stored.
-    pub fn plan_path(&self, plan_id: &str) -> PathBuf {
-        self.dir.join("plans").join(format!("{plan_id}.json"))
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Config`] unless `plan_id` has the exact shape
+    /// [`crate::payout::PayoutPlan::compute_id`] produces. The id reaches this
+    /// function straight from `dedalo settle --plan <id>`, so without that
+    /// check `../../../../etc/passwd` is a readable path and `a/b/c` is a
+    /// writable one — a plan id is an identifier, and it must never be
+    /// allowed to act as a path.
+    pub fn plan_path(&self, plan_id: &str) -> Result<PathBuf> {
+        validate_plan_id(plan_id)?;
+        Ok(self.dir.join("plans").join(format!("{plan_id}.json")))
     }
 
     /// Append one event. The log is never rewritten.
@@ -233,7 +246,7 @@ impl Ledger {
     /// Persist the full plan next to the ledger so a settled round can always
     /// be reconstructed line by line, not just summarised.
     pub fn save_plan(&self, plan: &PayoutPlan) -> Result<PathBuf> {
-        let path = self.plan_path(&plan.id);
+        let path = self.plan_path(&plan.id)?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
         }
@@ -244,11 +257,23 @@ impl Ledger {
 
     /// Read a saved plan back, re-verifying it on the way in.
     pub fn load_plan(&self, plan_id: &str) -> Result<PayoutPlan> {
-        let path = self.plan_path(plan_id);
+        let path = self.plan_path(plan_id)?;
         let raw = std::fs::read_to_string(&path).map_err(|e| Error::io(&path, e))?;
         let plan: PayoutPlan = serde_json::from_str(&raw)?;
         plan.verify()?;
         Ok(plan)
+    }
+
+    /// Take the exclusive settlement lock for this ledger.
+    ///
+    /// Held for as long as the returned value lives. Dropping it releases the
+    /// lock, including when settlement fails.
+    ///
+    /// # Errors
+    ///
+    /// Fails if another process already holds it.
+    pub fn lock(&self) -> Result<SettlementLock> {
+        SettlementLock::acquire(&self.dir)
     }
 
     /// Has this exact plan already been settled? Guards against double payment
@@ -285,6 +310,83 @@ impl Ledger {
     }
 }
 
+/// An exclusive claim on settling, released when dropped.
+///
+/// The ledger refuses to settle a plan id twice, but that check and the
+/// settlement itself are two separate steps. Two `dedalo settle` runs racing
+/// each other — two CI jobs on the same repository, a retried workflow
+/// overlapping the original — can both read "not settled" before either
+/// writes, and both broadcast.
+///
+/// Created with `create_new`, which is atomic: exactly one caller wins.
+#[derive(Debug)]
+pub struct SettlementLock {
+    path: PathBuf,
+}
+
+impl SettlementLock {
+    /// Take the lock, or fail because someone else holds it.
+    fn acquire(dir: &Path) -> Result<Self> {
+        std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
+        let path = dir.join(LOCK_FILE);
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut file) => {
+                // Written for a human who finds a stale lock, not read back.
+                let _ = writeln!(
+                    file,
+                    "pid {} since {}",
+                    std::process::id(),
+                    crate::payout::now_unix()
+                );
+                Ok(Self { path })
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                let holder = std::fs::read_to_string(&path).unwrap_or_default();
+                Err(Error::config(format!(
+                    "another settlement is in progress ({}). If that is wrong, \
+                     delete {} and try again",
+                    holder.trim(),
+                    path.display()
+                )))
+            }
+            Err(e) => Err(Error::io(&path, e)),
+        }
+    }
+}
+
+impl Drop for SettlementLock {
+    fn drop(&mut self) {
+        // A lock left behind is a nuisance the message above explains; failing
+        // to clean up must not mask the error that got us here.
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+/// A plan id is `ded1` followed by 32 lowercase hex digits, and nothing else.
+///
+/// Deliberately strict. Anything looser lets a caller steer a filesystem path
+/// with a value that looks like an identifier.
+fn validate_plan_id(plan_id: &str) -> Result<()> {
+    const PREFIX: &str = "ded1";
+    const DIGITS: usize = 32;
+
+    let body = plan_id.strip_prefix(PREFIX).ok_or_else(|| {
+        Error::config(format!(
+            "`{plan_id}` is not a plan id: it must start with `{PREFIX}`"
+        ))
+    })?;
+    if body.len() != DIGITS
+        || !body
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    {
+        return Err(Error::config(format!(
+            "`{plan_id}` is not a plan id: expected `{PREFIX}` and {DIGITS} lowercase hex digits"
+        )));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -294,6 +396,32 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn only_one_settlement_can_hold_the_lock() {
+        let root = temp_dir("lock");
+        let ledger = Ledger::open(&root).unwrap();
+
+        let first = ledger.lock().expect("the first caller takes it");
+        let second = ledger.lock();
+        assert!(second.is_err(), "a second caller must be refused");
+        let message = second.unwrap_err().to_string();
+        assert!(
+            message.contains("another settlement is in progress"),
+            "{message}"
+        );
+        assert!(
+            message.contains(LOCK_FILE),
+            "the message must name the file: {message}"
+        );
+
+        // Releasing it lets the next caller through, including after a failure.
+        drop(first);
+        let third = ledger.lock();
+        assert!(third.is_ok(), "the lock must be released on drop");
+
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     /// Reading must never write. A repository mounted read-only, or a checkout
