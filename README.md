@@ -245,6 +245,15 @@ Each stage is a standalone module, so you can swap any of them:
 | `settlement` | `Settlement` trait, dry-run and EVM backends |
 | `ledger` | append-only event log and the payout cursor |
 
+## How funds will move
+
+Nothing broadcasts yet, and the design for when it does is written down in
+[docs/settlement-architecture.md](docs/settlement-architecture.md): a **pull**
+model where a round is deposited once against a Merkle root and contributors
+claim, funded from a **multisig that automation proposes to but cannot sign
+for**, over an address layer that knows about address *formats* rather than
+one chain.
+
 ## Project status
 
 Early. The pipeline from git history to a verified, reproducible payout plan
