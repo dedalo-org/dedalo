@@ -3,6 +3,11 @@ name: Docs
 on:
   push:
     branches: [main]
+    paths:
+      - "crates/**"
+      - "site/**"
+      - "Cargo.*"
+      - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 concurrency:
@@ -14,33 +19,62 @@ permissions:
 
 jobs:
   build:
-    name: build api reference
+    timeout-minutes: 25
+    name: build the site
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@nightly
-      - uses: Swatinem/rust-cache@v2
-      - name: cargo doc
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: nightly
+
+      - name: Build the API reference
         env:
-          RUSTDOCFLAGS: -D warnings --cfg docsrs --enable-index-page -Zunstable-options
-        run: cargo doc --workspace --no-deps --all-features
-      - name: Land visitors on the core crate
+          # Broken intra-doc links and undocumented public items fail the
+          # build: the reference is generated, so it has to stay correct.
+          RUSTDOCFLAGS: -D warnings --cfg docsrs
+        run: cargo doc --locked --workspace --no-deps --all-features
+
+      - name: Assemble the published tree
         run: |
-          cat > target/doc/index.html <<'HTML'
+          set -eu
+          mkdir -p _site
+          # The landing page at /, the API reference at /api/.
+          cp -r site/. _site/
+          mkdir -p _site/api
+          cp -r target/doc/. _site/api/
+          cat > _site/api/index.html <<'HTML'
           <!doctype html>
           <meta charset="utf-8">
           <title>Dedalo — API reference</title>
           <meta http-equiv="refresh" content="0; url=dedalo_core/index.html">
           <link rel="canonical" href="dedalo_core/index.html">
-          <p>Redirecting to <a href="dedalo_core/index.html">the Dedalo core API reference</a>.</p>
+          <p>Redirecting to the <a href="dedalo_core/index.html">dedalo_core</a> API reference.</p>
           HTML
           # Pages must not run Jekyll over rustdoc's output.
-          touch target/doc/.nojekyll
-      - uses: actions/upload-pages-artifact@v4
+          touch _site/.nojekyll
+
+      - name: Check the assembled site
+        run: |
+          set -euo pipefail
+          # Structure, CSS, metadata and every internal link — resolved
+          # against the tree that is about to be published, so a link to the
+          # API reference is checked against the API reference that exists.
+          scripts/check-site.py --root site --built _site
+          test -f _site/api/dedalo_core/index.html
+          test -f _site/api/dedalo/index.html
+          test -f _site/robots.txt
+          test -f _site/sitemap.xml
+          echo "site tree checked and complete" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:
-          path: target/doc
+          path: _site
 
   deploy:
+    timeout-minutes: 10
     name: deploy to github pages
     needs: build
     runs-on: ubuntu-latest
@@ -52,4 +86,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

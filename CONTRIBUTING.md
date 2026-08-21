@@ -22,8 +22,31 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all
 ```
 
-`nix flake check` runs all of the above the way CI does. If it passes locally,
+`nix flake check` runs eight gates the way CI does — build and tests, clippy,
+rustfmt, the declared MSRV, `actionlint` and `zizmor` over the workflows,
+`shellcheck` over the scripts, and the site's structure. If it passes locally,
 CI will pass.
+
+## Branches and commit messages
+
+`main` is always releasable, and every change lands through a pull request.
+Work on short-lived branches named for what they do — `feat/…`, `fix/…`,
+`docs/…`, `ci/…` — and delete them once merged.
+
+Pull request titles follow [Conventional Commits](https://www.conventionalcommits.org)
+and are checked automatically. Because pull requests are squash merged, **the
+title becomes the changelog entry**, so write it for a reader of the release
+notes:
+
+```
+feat(cli): add `dedalo identity export`
+fix(money): keep dust with contributors when a weight is zero
+docs: explain how the protocol fee funds the network
+```
+
+Anything that changes what people are paid — amounts, plan ids, the fee split —
+is a breaking change even when it compiles. Say so with `BREAKING CHANGE:` in
+the body. [RELEASING.md](RELEASING.md) has the full policy.
 
 ## What a good pull request looks like
 
@@ -35,7 +58,12 @@ CI will pass.
 - **Money changes carry tests.** Anything touching `money`, `attribution`,
   `treasury` or `payout` needs a test proving the amounts still balance —
   including the awkward cases: zero weights, a single payee, amounts that do
-  not divide evenly.
+  not divide evenly. A new rule about what people are paid belongs in
+  `crates/dedalo-core/tests/properties.rs`, where generated inputs will try to
+  break it, not only in one example you chose.
+- **CLI output changes carry tests.** `action.yml` parses `--json`; renaming a
+  field breaks it silently. `crates/dedalo-cli/tests/cli.rs` is what catches
+  that.
 - **Commit messages say why.** The subject is the change; the body is the
   reason.
 - **Co-authors get credit.** Use `Co-authored-by:` trailers — Dedalo reads

