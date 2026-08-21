@@ -63,6 +63,19 @@
           ];
         };
 
+      # The workflow files, for the linters that check them. Kept separate
+      # from the build source so editing a workflow does not invalidate a
+      # cached compile, and vice versa.
+      workflowsFor =
+        pkgs:
+        pkgs.lib.fileset.toSource {
+          root = ./.;
+          fileset = pkgs.lib.fileset.unions [
+            ./.github
+            ./action.yml
+          ];
+        };
+
       commonArgs = pkgs: {
         pname = "dedalo";
         version = cargoToml.workspace.package.version;
@@ -133,6 +146,10 @@
             pkgs.git
             pkgs.taplo
             pkgs.nixfmt-rfc-style
+            pkgs.actionlint
+            pkgs.zizmor
+            pkgs.cargo-semver-checks
+            pkgs.shellcheck
           ];
 
           env.RUST_BACKTRACE = "1";
@@ -142,6 +159,8 @@
             echo "  cargo nextest run     run the test suite"
             echo "  cargo clippy --all-targets"
             echo "  cargo doc --open      browse the API reference"
+            echo "  actionlint .github/workflows/*.yml"
+            echo "  zizmor .github/workflows""
           '';
         };
       });
@@ -193,6 +212,77 @@
                 installPhase = "touch $out";
               }
             );
+
+          # Workflows are code that holds release secrets. actionlint catches
+          # what will not run; zizmor catches what will run but should not —
+          # script injection, over-broad permissions, unpinned actions.
+          actionlint =
+            pkgs.runCommand "dedalo-actionlint"
+              {
+                nativeBuildInputs = [
+                  pkgs.actionlint
+                  pkgs.shellcheck
+                ];
+                src = workflowsFor pkgs;
+              }
+              ''
+                cd $src
+                actionlint -color .github/workflows/*.yml
+                touch $out
+              '';
+
+          zizmor =
+            pkgs.runCommand "dedalo-zizmor"
+              {
+                nativeBuildInputs = [ pkgs.zizmor ];
+                src = workflowsFor pkgs;
+              }
+              ''
+                cd $src
+                # No network in the sandbox, and none needed: every finding
+                # here is derivable from the workflow text itself.
+                zizmor --offline --no-progress --persona=regular \
+                  --min-severity=low .github/workflows action.yml
+                touch $out
+              '';
+
+          shell =
+            pkgs.runCommand "dedalo-shellcheck"
+              {
+                nativeBuildInputs = [ pkgs.shellcheck ];
+                src = pkgs.lib.fileset.toSource {
+                  root = ./.;
+                  fileset = pkgs.lib.fileset.unions [
+                    ./install.sh
+                    ./scripts
+                  ];
+                };
+              }
+              ''
+                cd $src
+                shellcheck install.sh scripts/*.sh
+                touch $out
+              '';
+
+          # The site is hand-written HTML with an inline stylesheet, which
+          # means an editing slip ships silently unless something checks.
+          site =
+            pkgs.runCommand "dedalo-site-check"
+              {
+                nativeBuildInputs = [ pkgs.python3 ];
+                src = pkgs.lib.fileset.toSource {
+                  root = ./.;
+                  fileset = pkgs.lib.fileset.unions [
+                    ./site
+                    ./scripts/check-site.py
+                  ];
+                };
+              }
+              ''
+                cd $src
+                python3 scripts/check-site.py --root site
+                touch $out
+              '';
 
           # rustfmt needs no dependencies, so this check is nearly free.
           fmt =

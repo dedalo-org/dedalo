@@ -58,12 +58,19 @@ refactor(git): move trailer parsing behind the backend trait
    published record.
 
 3. **Merge it.** Merging a `release`-labelled pull request triggers the **Tag**
-   workflow, which creates and pushes `v<version>` from `main`.
+   workflow, which creates `v<version>` through the GitHub API — no credential
+   is ever written into a checkout — and then calls the release workflow
+   directly.
 
-4. **Watch the tag build.** The **Release** workflow then:
+   It has to call it rather than rely on the tag: GitHub suppresses events
+   caused by `GITHUB_TOKEN`, so a tag created by a workflow raises no `push`.
+   A tag pushed by a person still triggers **Release** on its own.
+
+4. **Watch the release build.** The **Release** workflow then:
    - re-runs fmt, clippy and the full test suite on the tagged commit;
    - verifies the tag matches the workspace version;
    - builds binaries for five targets with SHA-256 checksums;
+   - attaches signed build provenance to every archive;
    - publishes a GitHub release with the changelog section as its notes;
    - publishes `dedalo-core` then `dedalo` to crates.io;
    - pushes `ghcr.io/4137314/dedalo:<version>` and `:latest`.
@@ -94,8 +101,12 @@ secret is needed for either.
 Anyone can check that a published binary matches what the tag says:
 
 ```bash
+# The checksum published beside it
 curl -fsSL https://github.com/4137314/dedalo/releases/download/v0.1.0/dedalo-v0.1.0-x86_64-unknown-linux-gnu.tar.gz.sha256
 sha256sum dedalo-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
+
+# Or the signed provenance, which also proves which workflow built it
+gh attestation verify dedalo-v0.1.0-x86_64-unknown-linux-gnu.tar.gz --repo 4137314/dedalo
 ```
 
 Or rebuild it from source with the pinned toolchain:

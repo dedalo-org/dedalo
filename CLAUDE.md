@@ -57,10 +57,14 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all
 cargo doc --workspace --no-deps --open
 
-nix flake check              # what CI runs: build + tests, clippy, fmt, MSRV
+nix flake check              # all eight gates, exactly as CI runs them
 nix build .#docs             # the API reference the docs workflow publishes
 cargo deny check             # licence, advisory and source policy
 ```
+
+`nix flake check` covers: the workspace build and its tests, clippy, rustfmt,
+the declared MSRV, `actionlint` and `zizmor` over every workflow, `shellcheck`
+over the scripts, and the site's structure. If it passes locally, CI passes.
 
 Everything CI does is reproducible locally through `nix flake check`. If a
 change passes that, it will pass CI.
@@ -79,6 +83,14 @@ change passes that, it will pass CI.
 - **Tests live next to the code.** Unit tests in `mod tests`, cross-cutting
   behaviour in `crates/dedalo-core/tests/`. Test names are sentences:
   `split_conserves_every_base_unit`, not `test_split_2`.
+- **Money invariants get property tests.** `tests/properties.rs` hammers them
+  with generated inputs. A new rule about what people are paid belongs there,
+  not only in a hand-picked example.
+- **The CLI's JSON is a contract.** `action.yml` parses it, and
+  `crates/dedalo-cli/tests/cli.rs` pins the fields it reads. Renaming a field
+  breaks the Action silently, so that test is what catches it.
+- **`dedalo_core::testing`** builds throwaway repositories with real merges.
+  Use it rather than mocking git — a mock would only test the mock.
 - **100 columns**, `rustfmt.toml` is the authority, stable options only.
 - **MSRV is enforced, not documented.** `flake.nix` builds the workspace with
   exactly the compiler `rust-version` names, so raising it is a deliberate
@@ -109,6 +121,17 @@ Commit subjects, so a pull request title is a release note. Full policy in
   new version. Someone may already have downloaded the old one.
 - **Commands with side effects run once.** `action.yml` deliberately does not
   re-run `settle` to render nicer output; do not add a second invocation.
+- **Never interpolate `${{ }}` into a `run:` block.** Pass it through `env:`.
+  The Action executes in other people's repositories with their secrets in
+  scope; `zizmor` fails the build on this and it is right to.
+- **Every third-party action is pinned to a commit**, with the tag as a
+  trailing comment. A moving tag can be repointed at new code by whoever owns
+  it, and these workflows hold release secrets.
+- **Never add a checkout to `triage.yml`.** It runs on `pull_request_target`,
+  which means a write token; checking out the pull request's code there would
+  hand that token to a fork.
+- **Builds that publish artifacts do not restore caches.** A cache a pull
+  request could have written must not reach a released binary.
 
 ## Where to start reading
 

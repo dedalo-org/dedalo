@@ -1,7 +1,7 @@
 name: PR title
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, edited, reopened, synchronize]
 
 permissions:
@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   conventional:
+    timeout-minutes: 5
     name: conventional commit format
     runs-on: ubuntu-latest
     permissions:
@@ -16,7 +17,7 @@ jobs:
     steps:
       # Squash-merged PR titles become commit subjects, and the changelog is
       # generated from them — so the title is the release note.
-      - uses: amannn/action-semantic-pull-request@v6
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:

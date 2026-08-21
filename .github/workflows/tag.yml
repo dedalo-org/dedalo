@@ -5,8 +5,7 @@ on:
     types: [closed]
     branches: [main]
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   tag:
@@ -16,47 +15,84 @@ jobs:
       github.event.pull_request.merged == true &&
       contains(github.event.pull_request.labels.*.name, 'release')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v5
+      # Tags are created through the API rather than by pushing, so no
+      # credential is ever written into .git/config.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: main
-          fetch-depth: 0
+          persist-credentials: false
 
       - name: Read the version that was merged
         id: version
         run: |
+          set -euo pipefail
           version=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          {
+            printf 'version=%s\n' "$version"
+            printf 'tag=v%s\n' "$version"
+            printf 'major=v%s\n' "${version%%.*}"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Refuse to move an existing tag
+      - name: Refuse to move a tag that already exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
-          tag="v${{ steps.version.outputs.version }}"
-          if git rev-parse "$tag" >/dev/null 2>&1; then
-            echo "$tag already exists; a published release must never move" >&2
+          set -euo pipefail
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error title=Tag exists::${TAG} is already published; a released tag must never move"
             exit 1
           fi
 
-      - name: Create and push the tag
+      - name: Create the release tag
         env:
-          TAG: v${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          MAJOR: ${{ steps.version.outputs.major }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "$TAG"
-          git push origin "$TAG"
-          echo "Pushed $TAG" >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
 
-      - name: Move the major tag the Action is consumed by
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          # Release tags are immutable. The major tag is the one deliberate
-          # exception: `uses: 4137314/dedalo@v0` has to follow the latest
-          # release, which is how every GitHub Action is consumed. It points
-          # at an immutable release tag, so nothing published ever changes.
-          major="v${VERSION%%.*}"
-          git tag -f -a "$major" -m "Latest v${VERSION%%.*}.x release ($VERSION)"
-          git push --force origin "$major"
-          echo "Moved $major to v$VERSION" >> "$GITHUB_STEP_SUMMARY"
+          # An annotated tag object, then the ref that points at it.
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/tags" \
+            -f tag="$TAG" -f message="$TAG" \
+            -f object="$GITHUB_SHA" -f type=commit --jq '.sha')
+          gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref="refs/tags/${TAG}" -f sha="$tag_sha" >/dev/null
+          echo "Created $TAG" >> "$GITHUB_STEP_SUMMARY"
+
+          # The major tag is the one that moves: `uses: 4137314/dedalo@v0` has
+          # to follow the latest release. It points at an immutable release
+          # tag, so nothing already published changes underneath anyone.
+          major_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/tags" \
+            -f tag="$MAJOR" -f message="Latest ${MAJOR}.x release (${TAG})" \
+            -f object="$GITHUB_SHA" -f type=commit --jq '.sha')
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${MAJOR}" >/dev/null 2>&1; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${MAJOR}" \
+              -f sha="$major_sha" -F force=true >/dev/null
+          else
+            gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${MAJOR}" -f sha="$major_sha" >/dev/null
+          fi
+          echo "Moved $MAJOR to $TAG" >> "$GITHUB_STEP_SUMMARY"
+
+  # Called directly rather than relying on a push event, which GITHUB_TOKEN
+  # cannot raise.
+  release:
+    name: release
+    needs: tag
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
+    permissions:
+      contents: write
+      packages: write
+    # Not `inherit`: the release workflow declares exactly one secret, so
+    # exactly one secret crosses the boundary.
+    secrets:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

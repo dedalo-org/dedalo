@@ -3,24 +3,36 @@ name: Labels
 on:
   push:
     branches: [main]
-    paths: [".github/labels.yml", ".github/workflows/labels.yml"]
+    paths: [".github/labels.yml", "scripts/sync-labels.py", ".github/workflows/labels.yml"]
+  pull_request:
+    paths: [".github/labels.yml", "scripts/sync-labels.py"]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  issues: write
+permissions: {}
 
 jobs:
   sync:
-    name: sync label taxonomy
+    name: sync the label taxonomy
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
     steps:
-      - uses: actions/checkout@v5
-      - uses: micnncim/action-label-syncer@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          manifest: .github/labels.yml
-          # Labels removed from the manifest are removed from the repository,
-          # so the file stays the single source of truth.
-          prune: true
+          persist-credentials: false
+
+      # On a pull request the diff is shown but nothing is applied: label
+      # changes are reviewable like any other change.
+      - name: Preview the changes
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/sync-labels.py --dry-run --prune
+
+      - name: Apply
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/sync-labels.py --prune
