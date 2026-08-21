@@ -10,7 +10,7 @@ open_collective = "dedalo"
 
 [git]
 # Merges into this branch are what earn a payout.
-branch = "fix/ci-toolchain-resolution"
+branch = "main"
 # Merges whose subject starts with one of these are skipped entirely.
 ignore_subjects = ["chore(release)", "Merge branch"]
 # Emails that never receive a payout, however much they commit.

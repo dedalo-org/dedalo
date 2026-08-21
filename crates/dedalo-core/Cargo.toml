@@ -24,6 +24,8 @@ hex.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+# Enables the `testing` feature for this crate's own integration tests only.
+dedalo-core = { path = ".", features = ["testing"] }
 proptest.workspace = true
 
 [package.metadata.docs.rs]

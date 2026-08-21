@@ -134,6 +134,32 @@ impl Engine {
         self.ledger.state()
     }
 
+    /// Resolve the configured branch to a ref that exists in this checkout.
+    ///
+    /// CI checkouts are detached: `actions/checkout` fetches the commit under
+    /// test without creating a local branch, so `main` does not resolve even
+    /// though `origin/main` does. Falling back to the remote-tracking ref is
+    /// what lets the same config work on a laptop and in a pipeline.
+    ///
+    /// The returned ref is only ever used to query git. A plan always records
+    /// the branch *name* from the config, never the ref it resolved to, or the
+    /// same history would produce two different plan ids.
+    fn resolve_branch(&self) -> Result<String> {
+        let branch = &self.config.git.branch;
+        if self.repo.resolve(branch).is_ok() {
+            return Ok(branch.clone());
+        }
+        let remote = format!("origin/{branch}");
+        if self.repo.resolve(&remote).is_ok() {
+            tracing::debug!("`{branch}` is not a local ref; using `{remote}`");
+            return Ok(remote);
+        }
+        Err(Error::config(format!(
+            "branch `{branch}` does not exist here, and neither does `{remote}`. \
+             In CI, check out with `fetch-depth: 0` so the branch is fetched."
+        )))
+    }
+
     /// Merges on the configured branch that have not been paid out yet.
     ///
     /// `since` overrides the ledger cursor; passing `None` continues from the
@@ -144,7 +170,7 @@ impl Engine {
             None => self.state()?.last_settled_commit,
         };
         let query = HistoryQuery {
-            branch: self.config.git.branch.clone(),
+            branch: self.resolve_branch()?,
             since_commit: cursor,
             since_timestamp: None,
             limit: None,
@@ -168,7 +194,7 @@ impl Engine {
         attribution: &Attribution,
         gross: Amount,
     ) -> Result<PayoutPlan> {
-        let head = self.repo.resolve(&self.config.git.branch)?;
+        let head = self.repo.resolve(&self.resolve_branch()?)?;
         let range = PlanRange {
             branch: self.config.git.branch.clone(),
             from_commit: self.state()?.last_settled_commit,
