@@ -230,13 +230,30 @@ jobs:
           # The write path needs the caller's uid, since a host checkout is not
           # owned by the image's user. If this breaks, `dedalo init` in a
           # container is broken, which is most of the point of shipping one.
-          work=$(mktemp -d)
-          git clone --quiet "$PWD" "$work/repo"
-          docker run --rm -u "$(id -u):$(id -g)" -v "$work/repo:/repo" \
+          #
+          # Built from scratch rather than cloned from the workspace: a CI
+          # checkout is a detached HEAD with no local branches, so a clone of
+          # it has nothing for `dedalo` to read.
+          work="$(mktemp -d)/repo"
+          mkdir -p "$work"
+          git -C "$work" init -q -b main
+          git -C "$work" config user.email ci@example.com
+          git -C "$work" config user.name CI
+          echo seed > "$work/README.md"
+          git -C "$work" add -A
+          git -C "$work" commit -qm "Initial commit"
+          git -C "$work" checkout -q -b feature
+          printf 'a\nb\nc\n' > "$work/feature.txt"
+          git -C "$work" add -A
+          git -C "$work" commit -qm "Add a feature"
+          git -C "$work" checkout -q main
+          git -C "$work" merge -q --no-ff feature -m "Merge pull request: feature"
+
+          docker run --rm -u "$(id -u):$(id -g)" -v "$work:/repo" \
             dedalo:ci init --name container-smoke --force
-          docker run --rm -u "$(id -u):$(id -g)" -v "$work/repo:/repo" \
+          docker run --rm -u "$(id -u):$(id -g)" -v "$work:/repo" \
             dedalo:ci plan --amount 1000 --save
-          test -f "$work/repo/.dedalo/ledger.jsonl" \
+          test -f "$work/.dedalo/ledger.jsonl" \
             || { echo "::error title=Image cannot write::plan --save left no ledger"; exit 1; }
           echo "container writes to a mounted repository as the calling user"
 
