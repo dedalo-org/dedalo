@@ -17,3 +17,7 @@ result-*
 /dist
 /image
 /_site
+
+# Python bytecode from the helper scripts
+__pycache__/
+*.pyc
