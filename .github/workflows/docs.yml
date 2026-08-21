@@ -19,9 +19,14 @@ permissions:
 
 jobs:
   build:
+    env:
+      # Outranks rust-toolchain.toml, which would otherwise win.
+      RUSTUP_TOOLCHAIN: nightly
     timeout-minutes: 25
     name: build the site
     runs-on: ubuntu-latest
+    outputs:
+      pages-available: ${{ steps.pages.outputs.available }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -69,13 +74,32 @@ jobs:
           test -f _site/sitemap.xml
           echo "site tree checked and complete" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Is Pages enabled on this repository?
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/${GITHUB_REPOSITORY}/pages" >/dev/null 2>&1; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Pages not enabled::The site was built and checked but not published. Enable it under Settings → Pages with source 'GitHub Actions'; on a private repository that needs a paid plan."
+          fi
+
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        if: steps.pages.outputs.available == 'true'
         with:
           path: _site
 
+  # GitHub Pages needs the repository to be public, or the account to be on a
+  # paid plan. Until then the site is still built and checked on every push —
+  # which is where the value is — and only publishing is skipped, rather than
+  # leaving a permanently red workflow on main.
   deploy:
     timeout-minutes: 10
     name: deploy to github pages
+    if: needs.build.outputs.pages-available == 'true'
     needs: build
     runs-on: ubuntu-latest
     permissions:
