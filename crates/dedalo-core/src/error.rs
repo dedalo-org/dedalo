@@ -69,6 +69,15 @@ pub enum Error {
         decimals: u8,
     },
 
+    /// A payout destination is not a usable address.
+    #[error("`{value}` is not a valid address: {reason}")]
+    Address {
+        /// The text that was rejected.
+        value: String,
+        /// Why it was rejected.
+        reason: String,
+    },
+
     /// An arithmetic operation on money or weights would have wrapped.
     #[error("arithmetic overflow while computing {0}")]
     Overflow(&'static str),
@@ -102,6 +111,14 @@ impl Error {
         Error::Io {
             path: path.into(),
             source,
+        }
+    }
+
+    /// Build an address error.
+    pub fn address(value: impl Into<String>, reason: impl Into<String>) -> Self {
+        Error::Address {
+            value: value.into(),
+            reason: reason.into(),
         }
     }
 

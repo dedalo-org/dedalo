@@ -7,6 +7,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use dedalo_core::Engine;
+use dedalo_core::wallet::Address;
 use toml_edit::{Array, DocumentMut, Item, Table, value};
 
 use crate::cli::{IdentityCommand, RangeArgs};
@@ -49,7 +50,10 @@ fn list(engine: &Engine, json: bool) -> Result<()> {
     for identity in identities {
         table.push(vec![
             identity.handle.clone(),
-            ui::truncate(&identity.wallet, 20),
+            identity
+                .wallet
+                .as_ref()
+                .map_or_else(|| ui::dim("—"), |w| ui::truncate(w.as_str(), 20)),
             identity.emails.join(", "),
             if identity.excluded {
                 ui::dim("excluded")
@@ -63,9 +67,18 @@ fn list(engine: &Engine, json: bool) -> Result<()> {
 }
 
 fn link(engine: &Engine, handle: &str, wallet: &str, emails: &[String], json: bool) -> Result<()> {
-    if wallet.trim().is_empty() {
-        bail!("a wallet address is required");
+    // Validate before writing. The config rejects a bad address on load, so
+    // skipping the check here would just move the failure somewhere less
+    // obvious — and the EIP-55 checksum is what catches a mistyped character
+    // before it becomes an irreversible transfer.
+    let address = Address::parse(wallet).with_context(|| format!("cannot link `{handle}`"))?;
+    if address.is_zero() {
+        bail!(
+            "the zero address is a placeholder, not a destination: \
+             anything sent to it is destroyed"
+        );
     }
+    let wallet = address.as_str();
     let path = engine.config_path();
     let mut doc = load_document(path)?;
     let tables = identities_array(&mut doc);

@@ -39,10 +39,18 @@ has tests; if you change code near them, add more.
 4. **Plans are content-addressed.** `PayoutPlan::id` hashes everything that
    determines the outcome, and deliberately excludes `created_at`. Two runs
    over the same history and config must produce the same id.
-5. **One wallet, one transfer.** A contributor with several emails is merged
-   into a single item before a plan is finalised.
+5. **One wallet, one transfer.** Addresses compare through `wallet::Address`,
+   which is case-insensitive. Never compare wallets as strings: EIP-55
+   capitalisation means one account is routinely written two ways, and string
+   equality pays that person twice.
 6. **Nobody is silently dropped.** A contributor with no wallet appears in
-   `plan.unresolved` with a reason.
+   `plan.unresolved` with a reason, and whatever their share could not reach
+   appears in `plan.undistributed`. `items` plus `undistributed` equals the
+   gross amount, exactly.
+6b. **Identifiers are never paths.** A plan id reaches `plan_path` straight
+   from the command line; it is validated to `ded1` plus 32 lowercase hex
+   digits first. The same rule applies to anything else user-supplied that
+   ends up in a filename.
 7. **Rounds are idempotent.** The ledger refuses to settle the same plan id
    twice. A retried CI job must not pay twice.
 8. **Attribution is integer-scored.** Scores are milli-points (`u128`), so the
@@ -86,6 +94,14 @@ change passes that, it will pass CI.
 - **Money invariants get property tests.** `tests/properties.rs` hammers them
   with generated inputs. A new rule about what people are paid belongs there,
   not only in a hand-picked example.
+- **A defect that touched money gets an adversarial test.** `tests/adversarial.rs`
+  holds down what the system must *refuse*. When you fix something that could
+  have moved funds wrongly, add the test that would have caught it, and mark
+  it `FOUND:` so the next reader knows it was real.
+- **The plan hash is length-prefixed.** Every field absorbed by
+  `PayoutPlan::compute_id` carries its byte length. Appending a field without
+  one reintroduces the collision that let two different plans share an id;
+  bump `ENCODING_VERSION` if the encoding changes at all.
 - **The CLI's JSON is a contract.** `action.yml` parses it, and
   `crates/dedalo-cli/tests/cli.rs` pins the fields it reads. Renaming a field
   breaks the Action silently, so that test is what catches it.

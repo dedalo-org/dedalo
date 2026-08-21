@@ -12,17 +12,23 @@ use dedalo_core::ledger::Ledger;
 use dedalo_core::money::Amount;
 use dedalo_core::settlement::DryRunSettlement;
 use dedalo_core::testing::TempRepo;
+use dedalo_core::wallet::Address;
 use dedalo_core::{Engine, payout::PayeeKind};
 
 fn config_for(repo: &TempRepo) -> Config {
     let mut config = Config::template("demo");
     config.project.open_collective = Some("demo-collective".into());
-    config.wallets.source = "0xsource".into();
-    config.wallets.treasury = "0xtreasury".into();
-    config.wallets.open_collective = "0xopencollective".into();
+    config.wallets.source = Address::parse("0x1111111111111111111111111111111111111111").unwrap();
+    config.wallets.treasury = Address::parse("0x2222222222222222222222222222222222222222").unwrap();
+    config.wallets.open_collective =
+        Address::parse("0x3333333333333333333333333333333333333333").unwrap();
     config.identities = vec![
-        Identity::new("ada", "0xada").with_email("ada@example.com"),
-        Identity::new("bea", "0xbea").with_email("bea@example.com"),
+        Identity::parse("ada", "0x00000000000000000000000000000000000000ad")
+            .unwrap()
+            .with_email("ada@example.com"),
+        Identity::parse("bea", "0x00000000000000000000000000000000000000be")
+            .unwrap()
+            .with_email("bea@example.com"),
     ];
     config.save(repo.path().join("dedalo.toml")).unwrap();
     config
@@ -99,7 +105,10 @@ fn full_round_pays_contributors_treasury_and_protocol() {
         .iter()
         .find(|item| item.kind == PayeeKind::Protocol)
         .unwrap();
-    assert_eq!(protocol.wallet, "0xopencollective");
+    assert_eq!(
+        protocol.wallet,
+        Address::parse("0x3333333333333333333333333333333333333333").unwrap()
+    );
     assert_eq!(protocol.amount, gross.bps(250).unwrap());
 
     // Ada wrote three times the lines Bea did, so she earns more.

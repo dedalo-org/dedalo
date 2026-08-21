@@ -11,6 +11,7 @@ use dedalo_core::identity::Identity;
 use dedalo_core::money::{Amount, Asset};
 use dedalo_core::payout::{PayeeKind, PlanBuilder, PlanRange};
 use dedalo_core::treasury::FeeSchedule;
+use dedalo_core::wallet::Address;
 use proptest::prelude::*;
 
 /// Realistic money: up to a quintillion base units, which is ~10^12 USDC.
@@ -154,11 +155,13 @@ fn config_with(contributor_count: usize, fees: FeeSchedule) -> Config {
     let mut config = Config::template("proptest");
     config.asset = Asset::native("TEST", "testnet", 6);
     config.fees = fees;
-    config.wallets.treasury = "0xtreasury".into();
-    config.wallets.open_collective = "0xopencollective".into();
+    config.wallets.treasury = Address::parse("0x2222222222222222222222222222222222222222").unwrap();
+    config.wallets.open_collective =
+        Address::parse("0x3333333333333333333333333333333333333333").unwrap();
     config.identities = (0..contributor_count)
         .map(|i| {
-            Identity::new(format!("dev{i}"), format!("0xwallet{i}"))
+            Identity::parse(format!("dev{i}"), &format!("0x{:040x}", i + 1))
+                .unwrap()
                 .with_email(format!("dev{i}@example.com"))
         })
         .collect();
@@ -269,7 +272,7 @@ proptest! {
         let mut config = config_with(scores.len(), FeeSchedule::default());
         // Point every identity at the same address.
         for identity in &mut config.identities {
-            identity.wallet = "0xshared".into();
+            identity.wallet = Some(Address::parse("0x000000000000000000000000000000000000c0de").unwrap());
         }
         let plan = PlanBuilder::new(&config, &attribution_with(&scores), range(), gross)
             .created_at(0).build().unwrap();

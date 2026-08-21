@@ -13,6 +13,7 @@ use crate::config::Config;
 use crate::error::{Error, Result};
 use crate::money::{Amount, Asset};
 use crate::treasury::TreasurySplit;
+use crate::wallet::Address;
 
 /// Why a given address is receiving money.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -44,8 +45,8 @@ pub struct PayoutItem {
     pub kind: PayeeKind,
     /// Handle for contributors, or a fixed label for the fee recipients.
     pub handle: String,
-    /// Destination address.
-    pub wallet: String,
+    /// Destination address, validated and checksummed.
+    pub wallet: Address,
     /// Exactly what this address receives.
     pub amount: Amount,
     /// Attribution weight in milli-points; zero for fee recipients.
@@ -87,6 +88,14 @@ pub struct PayoutPlan {
     pub split: TreasurySplit,
     /// Every transfer, contributors first.
     pub items: Vec<PayoutItem>,
+    /// The part of the contributor pool that reached nobody, because every
+    /// contributor who earned it is in [`PayoutPlan::unresolved`].
+    ///
+    /// It is neither silently dropped nor quietly handed to the treasury: it
+    /// stays in the source wallet, and it is stated here so an operator can
+    /// see it. `items` plus this always equals the gross amount.
+    #[serde(default)]
+    pub undistributed: Amount,
     /// Contributors that earned a share but have no wallet on file. Their
     /// weight is excluded from the split, never silently redistributed
     /// without being reported.
@@ -144,11 +153,15 @@ impl PayoutPlan {
         if !self.split.is_balanced() {
             return Err(Error::config("plan split does not sum to the gross amount"));
         }
+        // Exact, not `<=`. A plan that pays out less than it was funded is
+        // only correct if it says where the difference went; anything else is
+        // money quietly disappearing from a round.
         let total = self.total()?;
-        if total > self.split.gross {
+        let accounted = total.checked_add(self.undistributed)?;
+        if accounted != self.split.gross {
             return Err(Error::config(format!(
-                "plan pays out {total} base units but the round is only {}",
-                self.split.gross
+                "plan accounts for {accounted} base units of a {} round ({total} in transfers, {} undistributed)",
+                self.split.gross, self.undistributed
             )));
         }
         let recomputed = self.compute_id();
@@ -162,24 +175,58 @@ impl PayoutPlan {
     }
 
     /// Deterministic content hash over everything that fixes the outcome.
+    ///
+    /// # Why the encoding looks the way it does
+    ///
+    /// Every field is absorbed with its byte length in front of it. Feeding
+    /// the fields end to end instead would make the boundaries ambiguous, and
+    /// two genuinely different plans could hash to the same id — an asset
+    /// `US` on chain `DCbase` and an asset `USDC` on chain `base` produce the
+    /// same byte stream. That matters more than it looks: the id is what
+    /// makes a plan tamper-evident, and what the distributor contract uses to
+    /// refuse a replay. A collision means a forged plan verifies, or a
+    /// legitimate round is rejected as already paid.
+    ///
+    /// The version tag makes any future change to this encoding a visible
+    /// change of id rather than a silent one.
+    /// Recompute the content hash from the plan's current contents.
+    ///
+    /// [`PayoutPlan::verify`] compares this against the stored [`PayoutPlan::id`],
+    /// which is what makes an edited plan fail rather than settle.
     pub fn compute_id(&self) -> String {
+        /// Bumped whenever the encoding below changes.
+        const ENCODING_VERSION: u8 = 1;
+
         let mut hasher = Sha256::new();
-        hasher.update(self.project.as_bytes());
-        hasher.update([0]);
-        hasher.update(self.asset.symbol.as_bytes());
-        hasher.update(self.asset.chain.as_bytes());
-        hasher.update(self.range.branch.as_bytes());
-        hasher.update(self.range.from_commit.as_deref().unwrap_or("").as_bytes());
-        hasher.update(self.range.to_commit.as_bytes());
-        hasher.update(self.split.gross.base_units().to_be_bytes());
-        hasher.update(self.split.protocol.base_units().to_be_bytes());
-        hasher.update(self.split.treasury.base_units().to_be_bytes());
+        hasher.update(b"dedalo.payout-plan.v");
+        hasher.update([ENCODING_VERSION]);
+
+        let mut field = |bytes: &[u8]| {
+            hasher.update((bytes.len() as u64).to_be_bytes());
+            hasher.update(bytes);
+        };
+
+        field(self.project.as_bytes());
+        field(self.asset.symbol.as_bytes());
+        field(self.asset.chain.as_bytes());
+        field(&[self.asset.decimals]);
+        field(self.asset.contract.as_deref().unwrap_or("").as_bytes());
+        field(self.range.branch.as_bytes());
+        field(self.range.from_commit.as_deref().unwrap_or("").as_bytes());
+        field(self.range.to_commit.as_bytes());
+        field(&self.split.gross.base_units().to_be_bytes());
+        field(&self.split.protocol.base_units().to_be_bytes());
+        field(&self.split.treasury.base_units().to_be_bytes());
+        field(&self.split.contributors.base_units().to_be_bytes());
+        field(&self.undistributed.base_units().to_be_bytes());
+
+        field(&(self.items.len() as u64).to_be_bytes());
         for item in &self.items {
-            hasher.update([0]);
-            hasher.update(item.kind.label().as_bytes());
-            hasher.update(item.wallet.as_bytes());
-            hasher.update(item.amount.base_units().to_be_bytes());
+            field(item.kind.label().as_bytes());
+            field(item.wallet.as_str().as_bytes());
+            field(&item.amount.base_units().to_be_bytes());
         }
+
         format!("ded1{}", hex::encode(&hasher.finalize()[..16]))
     }
 
@@ -242,12 +289,9 @@ impl<'a> PlanBuilder<'a> {
                 continue;
             }
             match identities.resolve(author) {
-                Some(identity) if !identity.excluded && !identity.wallet.trim().is_empty() => {
-                    payable.push((
-                        identity.handle.clone(),
-                        identity.wallet.clone(),
-                        contribution,
-                    ));
+                Some(identity) if !identity.excluded && identity.wallet.is_some() => {
+                    let wallet = identity.wallet.clone().expect("guarded by the arm above");
+                    payable.push((identity.handle.clone(), wallet, contribution));
                 }
                 Some(identity) => unresolved.push(UnresolvedContributor {
                     name: author.name.clone(),
@@ -309,6 +353,15 @@ impl<'a> PlanBuilder<'a> {
             share_bps: self.config.fees.protocol_bps as u32,
         });
 
+        // Whatever the contributor pool could not reach. With no payable
+        // contributors this is the entire pool — exactly the case that used
+        // to vanish from the plan without a trace.
+        let distributed = items
+            .iter()
+            .filter(|item| item.kind == PayeeKind::Contributor)
+            .try_fold(Amount::ZERO, |acc, item| acc.checked_add(item.amount))?;
+        let undistributed = split.contributors.checked_sub(distributed)?;
+
         let mut plan = PayoutPlan {
             id: String::new(),
             project: self.config.project.name.clone(),
@@ -317,6 +370,7 @@ impl<'a> PlanBuilder<'a> {
             range: self.range,
             split,
             items,
+            undistributed,
             unresolved,
         };
         plan.id = plan.compute_id();
@@ -329,6 +383,9 @@ impl<'a> PlanBuilder<'a> {
 fn merge_duplicate_wallets(items: &mut Vec<PayoutItem>) {
     let mut merged: Vec<PayoutItem> = Vec::with_capacity(items.len());
     for item in items.drain(..) {
+        // Compared through `Address`, which is case-insensitive: EIP-55
+        // capitalisation means one account is routinely written two ways, and
+        // treating those as two payees pays the same person twice.
         match merged
             .iter()
             .position(|existing: &PayoutItem| existing.wallet == item.wallet)
@@ -381,11 +438,17 @@ mod tests {
 
     fn setup() -> (Config, Attribution) {
         let mut config = Config::template("dedalo");
-        config.wallets.treasury = "0xtreasury".into();
-        config.wallets.open_collective = "0xopencollective".into();
+        config.wallets.treasury =
+            Address::parse("0x2222222222222222222222222222222222222222").unwrap();
+        config.wallets.open_collective =
+            Address::parse("0x3333333333333333333333333333333333333333").unwrap();
         config.identities = vec![
-            Identity::new("ada", "0xada").with_email("ada@x.io"),
-            Identity::new("bea", "0xbea").with_email("bea@x.io"),
+            Identity::parse("ada", "0x00000000000000000000000000000000000000ad")
+                .unwrap()
+                .with_email("ada@x.io"),
+            Identity::parse("bea", "0x00000000000000000000000000000000000000be")
+                .unwrap()
+                .with_email("bea@x.io"),
         ];
         let attribution = Attribution {
             contributions: vec![
@@ -472,9 +535,11 @@ mod tests {
     #[test]
     fn one_wallet_receives_a_single_transfer() {
         let (mut config, mut attribution) = setup();
-        config
-            .identities
-            .push(Identity::new("ada-work", "0xada").with_email("ada@work.io"));
+        config.identities.push(
+            Identity::parse("ada-work", "0x00000000000000000000000000000000000000ad")
+                .unwrap()
+                .with_email("ada@work.io"),
+        );
         attribution
             .contributions
             .push(contribution("ada@work.io", 1_000));
@@ -490,7 +555,8 @@ mod tests {
         .build()
         .unwrap();
 
-        assert_eq!(plan.items.iter().filter(|i| i.wallet == "0xada").count(), 1);
+        let ada = Address::parse("0x00000000000000000000000000000000000000ad").unwrap();
+        assert_eq!(plan.items.iter().filter(|i| i.wallet == ada).count(), 1);
         plan.verify().unwrap();
     }
 }

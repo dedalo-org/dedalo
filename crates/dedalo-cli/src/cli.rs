@@ -114,6 +114,14 @@ pub struct SettleArgs {
     /// Actually broadcast, using the backend from dedalo.toml.
     #[arg(long)]
     pub execute: bool,
+
+    /// Settle even though part of the contributor pool has no destination.
+    ///
+    /// Only meaningful when nobody in the round has a wallet on file, which
+    /// normally means a `dedalo identity link` is missing rather than that
+    /// you meant to send the fees alone.
+    #[arg(long)]
+    pub allow_undistributed: bool,
 }
 
 #[derive(Debug, Subcommand)]
