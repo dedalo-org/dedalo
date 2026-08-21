@@ -136,11 +136,21 @@ pub struct Ledger {
 }
 
 impl Ledger {
-    /// Open (creating if needed) the `.dedalo` directory under `root`.
+    /// Point at the `.dedalo` directory under `root`, without creating it.
+    ///
+    /// Creating it here would mean every read touched the disk: `dedalo scan`
+    /// on a read-only checkout, or on a repository mounted `:ro` into a
+    /// container, would fail before reading anything. The directory is created
+    /// on the first write instead.
     pub fn open(root: impl AsRef<Path>) -> Result<Self> {
-        let dir = root.as_ref().join(STATE_DIR);
-        std::fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
-        Ok(Self { dir })
+        Ok(Self {
+            dir: root.as_ref().join(STATE_DIR),
+        })
+    }
+
+    /// Create the state directory. Called by every write path, never by a read.
+    fn ensure_dir(&self) -> Result<()> {
+        std::fs::create_dir_all(&self.dir).map_err(|e| Error::io(&self.dir, e))
     }
 
     /// The `.dedalo` directory this ledger lives in.
@@ -165,6 +175,7 @@ impl Ledger {
 
     /// Append one event. The log is never rewritten.
     pub fn append(&self, entry: &LedgerEntry) -> Result<()> {
+        self.ensure_dir()?;
         let path = self.ledger_path();
         let mut file = OpenOptions::new()
             .create(true)
@@ -213,6 +224,7 @@ impl Ledger {
 
     /// Overwrite the payout cursor.
     pub fn save_state(&self, state: &State) -> Result<()> {
+        self.ensure_dir()?;
         let path = self.state_path();
         let raw = serde_json::to_string_pretty(state)?;
         std::fs::write(&path, raw).map_err(|e| Error::io(&path, e))
@@ -282,6 +294,36 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    /// Reading must never write. A repository mounted read-only, or a checkout
+    /// the user cannot modify, still has to answer `scan` and `contributors`.
+    #[test]
+    fn opening_a_ledger_creates_nothing() {
+        let root = temp_dir("readonly");
+        let ledger = Ledger::open(&root).unwrap();
+
+        assert!(!ledger.dir().exists(), "open must not touch the filesystem");
+        assert!(ledger.entries().unwrap().is_empty());
+        assert_eq!(ledger.state().unwrap(), State::default());
+        assert!(!ledger.is_settled("ded1abc").unwrap());
+        assert!(
+            !ledger.dir().exists(),
+            "reads must not create the directory"
+        );
+
+        // The first write is what brings it into existence.
+        ledger
+            .append(&LedgerEntry::SettlementFailed {
+                at: 0,
+                plan_id: "ded1abc".into(),
+                backend: "dry-run".into(),
+                reason: "test".into(),
+            })
+            .unwrap();
+        assert!(ledger.dir().exists());
+
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

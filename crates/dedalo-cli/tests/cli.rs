@@ -310,6 +310,40 @@ fn identity_link_is_idempotent_and_remove_undoes_it() {
         .stderr(contains("no identity"));
 }
 
+/// The read-only commands are the ones people run in CI, often against a
+/// checkout they cannot write to. None of them may leave `.dedalo` behind.
+#[test]
+fn read_only_commands_write_nothing() {
+    let repo = project();
+    let state = repo.path().join(".dedalo");
+    assert!(!state.exists(), "the fixture starts clean");
+
+    for args in [
+        vec!["status"],
+        vec!["scan"],
+        vec!["contributors"],
+        vec!["ledger"],
+        vec!["identity", "list"],
+        vec!["identity", "missing"],
+        vec!["plan", "--amount", "1000"],
+    ] {
+        dedalo(repo.path()).args(&args).assert().success();
+        assert!(
+            !state.exists(),
+            "`dedalo {}` created {}",
+            args.join(" "),
+            state.display()
+        );
+    }
+
+    // `--save` is the point at which writing is asked for.
+    dedalo(repo.path())
+        .args(["plan", "--amount", "1000", "--save"])
+        .assert()
+        .success();
+    assert!(state.exists(), "plan --save must persist the plan");
+}
+
 #[test]
 fn every_command_emits_parseable_json() {
     let repo = project();
