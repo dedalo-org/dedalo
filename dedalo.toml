@@ -1,0 +1,76 @@
+# Dedalo — merge-to-earn funding rules for this repository.
+# Everything here is public and reviewable: a payout can be recomputed by
+# anyone from this file plus the git history.
+
+[project]
+name = "dedalo"
+repository = "https://github.com/4137314/dedalo"
+# Open Collective slug this project self-funds through.
+open_collective = "dedalo"
+
+[git]
+# Merges into this branch are what earn a payout.
+branch = "main"
+# Merges whose subject starts with one of these are skipped entirely.
+ignore_subjects = ["chore(release)", "Merge branch"]
+# Emails that never receive a payout, however much they commit.
+ignore_emails = ["noreply@github.com", "actions@github.com"]
+
+[attribution]
+# Flat score every merged pull request earns, regardless of size.
+base_points = 100
+# Per-line scoring. Deleting code is work too.
+points_per_insertion = 1.0
+points_per_deletion = 0.5
+# Ceiling per merge, so one vendored dependency cannot drain a round.
+max_points_per_merge = 5000
+# Credit whoever pressed "merge", on top of the commit authors.
+credit_merger = false
+# Share a commit's score with its `Co-authored-by:` trailers.
+split_with_co_authors = true
+
+[asset]
+# The token contributors are paid in.
+symbol = "USDC"
+decimals = 6
+chain = "base"
+contract = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+
+[fees]
+# Taken off the top of every round, in basis points (10000 = 100%).
+# The protocol fee funds the network's own Open Collective — this is what
+# makes Dedalo self-sustaining instead of grant-dependent.
+protocol_bps = 250
+# Retained by this project for future rounds, audits, infrastructure.
+treasury_bps = 1500
+# The remaining 82.5% is split across contributors by attribution weight.
+
+# The addresses below are placeholders on purpose. Settlement is not live —
+# the evm backend stops before signing — so there is nothing for them to
+# receive yet, and a real address here would be a claim the code cannot honour.
+# They become real in the same change that deploys the audited distributor.
+[wallets]
+# Funds each round is paid out of.
+source = "0x0000000000000000000000000000000000000000"
+# This project's own reserve.
+treasury = "0x0000000000000000000000000000000000000000"
+# The network's Open Collective wallet, receiving `fees.protocol_bps`.
+open_collective = "0x0000000000000000000000000000000000000000"
+
+[settlement]
+# `dry-run` computes and verifies a round without spending anything.
+# Switch to `evm` once the wallets above are real.
+backend = "dry-run"
+# rpc_url = "https://mainnet.base.org"
+# chain_id = 8453
+# contract = "0x0000000000000000000000000000000000000000"
+# Env var holding the signing key. The key itself never goes in this file.
+signer_env = "DEDALO_SIGNER_KEY"
+
+# Contributors and their wallets. Add them with:
+#   dedalo identity link <handle> <wallet> --email <git-email>
+#
+# [[identities]]
+# handle = "ada"
+# wallet = "0x0000000000000000000000000000000000000000"
+# emails = ["ada@example.com"]

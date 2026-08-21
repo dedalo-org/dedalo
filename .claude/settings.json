@@ -28,11 +28,13 @@
       "Read(./**/*.key)",
       "Read(./**/*.pem)",
       "Read(./**/id_rsa*)",
-      "Bash(cargo publish:*)",
-      "Bash(git push:*)"
+      "Bash(cargo publish:*)"
     ],
     "ask": [
-      "Bash(dedalo settle:*)"
+      "Bash(dedalo settle:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh release:*)",
+      "Bash(git push:*)"
     ]
   },
   "env": {

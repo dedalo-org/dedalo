@@ -20,6 +20,9 @@ env:
 
 jobs:
   lint:
+    env:
+      # Outranks rust-toolchain.toml, which would otherwise win.
+      RUSTUP_TOOLCHAIN: stable
     timeout-minutes: 15
     name: fmt + clippy
     runs-on: ubuntu-latest
@@ -38,6 +41,9 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
   test:
+    env:
+      # Outranks rust-toolchain.toml, which would otherwise win.
+      RUSTUP_TOOLCHAIN: stable
     timeout-minutes: 25
     name: test / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -80,10 +86,31 @@ jobs:
         with:
           toolchain: ${{ steps.msrv.outputs.version }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      # Without this the job passed vacuously: rust-toolchain.toml pins 1.91.1
+      # and outranks `rustup default`, so the MSRV was never actually built.
+      # Asserting the version means it can never silently drift again.
+      - name: The toolchain in use must be the declared MSRV
+        env:
+          RUSTUP_TOOLCHAIN: ${{ steps.msrv.outputs.version }}
+          EXPECTED: ${{ steps.msrv.outputs.version }}
+        run: |
+          set -euo pipefail
+          actual=$(rustc --version | cut -d' ' -f2)
+          echo "rustc $actual (expecting $EXPECTED)"
+          if [ "$actual" != "$EXPECTED" ]; then
+            echo "::error title=Wrong toolchain::the MSRV job is building with $actual, not $EXPECTED"
+            exit 1
+          fi
+
       - name: cargo check on the declared MSRV
+        env:
+          RUSTUP_TOOLCHAIN: ${{ steps.msrv.outputs.version }}
         run: cargo check --locked --workspace --all-features --all-targets
 
   docs:
+    env:
+      # Outranks rust-toolchain.toml, which would otherwise win.
+      RUSTUP_TOOLCHAIN: nightly
     timeout-minutes: 20
     name: rustdoc
     runs-on: ubuntu-latest
@@ -103,6 +130,9 @@ jobs:
         run: cargo doc --locked --workspace --no-deps --all-features
 
   coverage:
+    env:
+      # Outranks rust-toolchain.toml, which would otherwise win.
+      RUSTUP_TOOLCHAIN: stable
     timeout-minutes: 30
     name: coverage
     runs-on: ubuntu-latest
@@ -134,6 +164,9 @@ jobs:
           path: lcov.info
 
   packaging:
+    env:
+      # Outranks rust-toolchain.toml, which would otherwise win.
+      RUSTUP_TOOLCHAIN: stable
     name: packaging and distribution
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -161,10 +194,16 @@ jobs:
           set -euo pipefail
           binary=target/x86_64-unknown-linux-musl/release/dedalo
           file "$binary"
-          if ldd "$binary" 2>&1 | grep -qv "not a dynamic executable"; then
+          # Ask the ELF headers, not ldd: its wording depends on the libc and
+          # on whether the binary is static-pie ("statically linked") or a
+          # plain static ("not a dynamic executable"). A binary with no shared
+          # dependencies has no NEEDED entries, whichever form it takes.
+          if readelf -d "$binary" 2>/dev/null | grep -q 'NEEDED'; then
+            readelf -d "$binary" | grep 'NEEDED' || true
             echo "::error title=Not static::the musl build links against shared libraries"
             exit 1
           fi
+          echo "static: no NEEDED entries in the dynamic section"
 
       # Exercise the Dockerfile exactly as the release does, then prove the
       # image works on a repository it did not build: non-root user, git
@@ -179,10 +218,44 @@ jobs:
       - name: The image runs against a mounted repository
         run: |
           set -euo pipefail
+
           docker run --rm dedalo:ci --version
+
+          # Read-only, as the image's own non-root user, against a checkout it
+          # does not own. This is what trips git's safe.directory guard if the
+          # image forgets to set it.
           docker run --rm -v "$PWD:/repo:ro" dedalo:ci scan --limit 1
-          # A repository owned by another user must not trip git's safety check.
-          docker run --rm -v "$PWD:/repo:ro" dedalo:ci --json scan | head -c 200
+          docker run --rm -v "$PWD:/repo:ro" dedalo:ci --json contributors > /dev/null
+
+          # The write path needs the caller's uid, since a host checkout is not
+          # owned by the image's user. If this breaks, `dedalo init` in a
+          # container is broken, which is most of the point of shipping one.
+          #
+          # Built from scratch rather than cloned from the workspace: a CI
+          # checkout is a detached HEAD with no local branches, so a clone of
+          # it has nothing for `dedalo` to read.
+          work="$(mktemp -d)/repo"
+          mkdir -p "$work"
+          git -C "$work" init -q -b main
+          git -C "$work" config user.email ci@example.com
+          git -C "$work" config user.name CI
+          echo seed > "$work/README.md"
+          git -C "$work" add -A
+          git -C "$work" commit -qm "Initial commit"
+          git -C "$work" checkout -q -b feature
+          printf 'a\nb\nc\n' > "$work/feature.txt"
+          git -C "$work" add -A
+          git -C "$work" commit -qm "Add a feature"
+          git -C "$work" checkout -q main
+          git -C "$work" merge -q --no-ff feature -m "Merge pull request: feature"
+
+          docker run --rm -u "$(id -u):$(id -g)" -v "$work:/repo" \
+            dedalo:ci init --name container-smoke --force
+          docker run --rm -u "$(id -u):$(id -g)" -v "$work:/repo" \
+            dedalo:ci plan --amount 1000 --save
+          test -f "$work/.dedalo/ledger.jsonl" \
+            || { echo "::error title=Image cannot write::plan --save left no ledger"; exit 1; }
+          echo "container writes to a mounted repository as the calling user"
 
       - name: install.sh fails safely on a version that does not exist
         run: |
@@ -200,6 +273,9 @@ jobs:
           fi
 
   semver:
+    env:
+      # Outranks rust-toolchain.toml, which would otherwise win.
+      RUSTUP_TOOLCHAIN: stable
     name: public api compatibility
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

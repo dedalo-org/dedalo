@@ -310,6 +310,40 @@ fn identity_link_is_idempotent_and_remove_undoes_it() {
         .stderr(contains("no identity"));
 }
 
+/// The read-only commands are the ones people run in CI, often against a
+/// checkout they cannot write to. None of them may leave `.dedalo` behind.
+#[test]
+fn read_only_commands_write_nothing() {
+    let repo = project();
+    let state = repo.path().join(".dedalo");
+    assert!(!state.exists(), "the fixture starts clean");
+
+    for args in [
+        vec!["status"],
+        vec!["scan"],
+        vec!["contributors"],
+        vec!["ledger"],
+        vec!["identity", "list"],
+        vec!["identity", "missing"],
+        vec!["plan", "--amount", "1000"],
+    ] {
+        dedalo(repo.path()).args(&args).assert().success();
+        assert!(
+            !state.exists(),
+            "`dedalo {}` created {}",
+            args.join(" "),
+            state.display()
+        );
+    }
+
+    // `--save` is the point at which writing is asked for.
+    dedalo(repo.path())
+        .args(["plan", "--amount", "1000", "--save"])
+        .assert()
+        .success();
+    assert!(state.exists(), "plan --save must persist the plan");
+}
+
 #[test]
 fn every_command_emits_parseable_json() {
     let repo = project();
@@ -339,6 +373,43 @@ fn an_empty_range_is_an_empty_round_not_an_error() {
         .assert()
         .success()
         .stdout(contains("No contributions"));
+}
+
+/// `dedalo scan | head` is an ordinary thing to type. Rust ignores SIGPIPE by
+/// default, which used to turn it into a panic with a backtrace.
+#[cfg(unix)]
+#[test]
+fn closing_the_pipe_early_does_not_panic() {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command as StdCommand, Stdio};
+
+    let repo = project();
+    let exe = assert_cmd::cargo::cargo_bin("dedalo");
+
+    let mut child = StdCommand::new(exe)
+        .arg("-C")
+        .arg(repo.path())
+        .args(["--json", "scan"])
+        .env("NO_COLOR", "1")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("dedalo must start");
+
+    // Read one line, then drop the pipe while the child is still writing.
+    {
+        let stdout = child.stdout.take().expect("piped");
+        let mut reader = BufReader::new(stdout);
+        let mut line = String::new();
+        let _ = reader.read_line(&mut line);
+    }
+
+    let output = child.wait_with_output().expect("dedalo must exit");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("panicked"),
+        "a closed pipe must not panic:\n{stderr}"
+    );
 }
 
 #[test]

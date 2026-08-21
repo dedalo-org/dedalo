@@ -2,10 +2,8 @@
 //!
 //! The unit tests cover the arithmetic; this one covers the part that can
 //! only break against the actual `git` binary: reading merges, attributing
-//! them, and turning them into a settled round.
-
-use std::path::{Path, PathBuf};
-use std::process::Command;
+//! them, and turning them into a settled round. The repository harness lives
+//! in `dedalo_core::testing`, so downstream crates can use the same one.
 
 use dedalo_core::config::Config;
 use dedalo_core::git::{CliGit, GitBackend, HistoryQuery};
@@ -13,103 +11,8 @@ use dedalo_core::identity::Identity;
 use dedalo_core::ledger::Ledger;
 use dedalo_core::money::Amount;
 use dedalo_core::settlement::DryRunSettlement;
+use dedalo_core::testing::TempRepo;
 use dedalo_core::{Engine, payout::PayeeKind};
-
-/// A throwaway repository that cleans itself up.
-struct TempRepo {
-    path: PathBuf,
-}
-
-impl TempRepo {
-    fn new(tag: &str) -> Self {
-        let path = std::env::temp_dir().join(format!(
-            "dedalo-e2e-{tag}-{}-{:?}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&path).unwrap();
-        let repo = Self { path };
-        repo.git(&["init", "-q", "-b", "main"]);
-        repo.git(&["config", "user.name", "Maintainer"]);
-        repo.git(&["config", "user.email", "maint@example.com"]);
-        repo.git(&["config", "commit.gpgsign", "false"]);
-        repo.commit_file("README.md", "seed", "Initial commit", None);
-        repo
-    }
-
-    fn git(&self, args: &[&str]) -> String {
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(&self.path)
-            .args(args)
-            .env("GIT_COMMITTER_NAME", "Maintainer")
-            .env("GIT_COMMITTER_EMAIL", "maint@example.com")
-            .output()
-            .expect("git must be installed to run these tests");
-        assert!(
-            output.status.success(),
-            "git {args:?} failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        String::from_utf8_lossy(&output.stdout).into_owned()
-    }
-
-    fn commit_file(&self, name: &str, body: &str, message: &str, author: Option<(&str, &str)>) {
-        std::fs::write(self.path.join(name), body).unwrap();
-        self.git(&["add", "-A"]);
-        let (author_name, author_email) = author.unwrap_or(("Maintainer", "maint@example.com"));
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(&self.path)
-            .args(["commit", "-q", "-m", message])
-            .env("GIT_AUTHOR_NAME", author_name)
-            .env("GIT_AUTHOR_EMAIL", author_email)
-            .env("GIT_COMMITTER_NAME", "Maintainer")
-            .env("GIT_COMMITTER_EMAIL", "maint@example.com")
-            .output()
-            .unwrap();
-        assert!(output.status.success());
-    }
-
-    /// Branch off main, add `lines` lines authored by `author`, merge back.
-    fn merge_feature(
-        &self,
-        branch: &str,
-        author: (&str, &str),
-        lines: usize,
-        trailer: Option<&str>,
-    ) {
-        self.git(&["checkout", "-q", "-b", branch, "main"]);
-        let body: String = (0..lines).map(|i| format!("line {i}\n")).collect();
-        let message = match trailer {
-            Some(trailer) => format!("Implement {branch}\n\n{trailer}"),
-            None => format!("Implement {branch}"),
-        };
-        self.commit_file(&format!("{branch}.txt"), &body, &message, Some(author));
-        self.git(&["checkout", "-q", "main"]);
-        self.git(&[
-            "merge",
-            "-q",
-            "--no-ff",
-            branch,
-            "-m",
-            &format!("Merge pull request: {branch}"),
-        ]);
-    }
-
-    fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl Drop for TempRepo {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.path);
-    }
-}
 
 fn config_for(repo: &TempRepo) -> Config {
     let mut config = Config::template("demo");
@@ -140,8 +43,8 @@ fn engine_for(repo: &TempRepo) -> Engine {
 #[test]
 fn reads_merges_with_their_commits_and_diffs() {
     let repo = TempRepo::new("read");
-    repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 40, None);
-    repo.merge_feature(
+    repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 40);
+    repo.merge_feature_with_trailer(
         "feature-b",
         ("Bea", "bea@example.com"),
         10,
@@ -174,8 +77,8 @@ fn reads_merges_with_their_commits_and_diffs() {
 #[test]
 fn full_round_pays_contributors_treasury_and_protocol() {
     let repo = TempRepo::new("round");
-    repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 30, None);
-    repo.merge_feature("feature-b", ("Bea", "bea@example.com"), 10, None);
+    repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 30);
+    repo.merge_feature("feature-b", ("Bea", "bea@example.com"), 10);
 
     let engine = engine_for(&repo);
     let merges = engine.scan(None).unwrap();
@@ -213,13 +116,13 @@ fn full_round_pays_contributors_treasury_and_protocol() {
 #[test]
 fn scanning_resumes_after_the_last_settled_commit() {
     let repo = TempRepo::new("cursor");
-    repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 10, None);
+    repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 10);
     let first_round_head = repo.git(&["rev-parse", "HEAD"]).trim().to_string();
 
     let engine = engine_for(&repo);
     assert_eq!(engine.scan(None).unwrap().len(), 1);
 
-    repo.merge_feature("feature-b", ("Bea", "bea@example.com"), 10, None);
+    repo.merge_feature("feature-b", ("Bea", "bea@example.com"), 10);
     assert_eq!(engine.scan(None).unwrap().len(), 2);
 
     // Once the first merge is paid for, only newer merges remain pending.
@@ -228,10 +131,95 @@ fn scanning_resumes_after_the_last_settled_commit() {
     assert!(pending[0].subject.contains("feature-b"));
 }
 
+/// CI checks out a detached HEAD without creating local branches, so `main`
+/// does not resolve even though `origin/main` does. A tool that calls itself
+/// CI-native has to work there.
+#[test]
+fn a_detached_checkout_resolves_the_branch_through_the_remote() {
+    let origin = TempRepo::new("origin");
+    origin.merge_feature("feature-a", ("Ada", "ada@example.com"), 10);
+
+    // A clone, then the state actions/checkout leaves behind: detached, with
+    // no local branch of the name the config asks for.
+    let clone = TempRepo::new("detached");
+    clone.git(&[
+        "remote",
+        "add",
+        "upstream",
+        &origin.path().to_string_lossy(),
+    ]);
+    clone.git(&["fetch", "--quiet", "upstream"]);
+    clone.git(&[
+        "update-ref",
+        "refs/remotes/origin/main",
+        "refs/remotes/upstream/main",
+    ]);
+    clone.git(&[
+        "checkout",
+        "--quiet",
+        "--detach",
+        "refs/remotes/origin/main",
+    ]);
+    clone.git(&["branch", "-D", "main"]);
+    assert!(
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(clone.path())
+            .args(["rev-parse", "--verify", "--quiet", "refs/heads/main"])
+            .output()
+            .unwrap()
+            .stdout
+            .is_empty(),
+        "the fixture must have no local `main`"
+    );
+
+    let engine = engine_for(&clone);
+    let merges = engine.scan(None).expect("must resolve through origin/main");
+    assert_eq!(merges.len(), 1);
+
+    // The plan still records the configured branch name, not the ref it
+    // resolved to — otherwise the same history would yield two plan ids.
+    let attribution = engine.attribute(&merges);
+    let plan = engine
+        .plan(&merges, &attribution, Amount::from_base_units(1_000))
+        .unwrap();
+    assert_eq!(plan.range.branch, "main");
+}
+
+#[test]
+fn a_branch_that_exists_nowhere_says_so() {
+    let repo = TempRepo::new("nobranch");
+    repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 5);
+
+    let mut config = config_for(&repo);
+    config.git.branch = "does-not-exist".into();
+    config.save(repo.path().join("dedalo.toml")).unwrap();
+
+    let git = CliGit::discover(repo.path()).unwrap();
+    let ledger = Ledger::open(repo.path()).unwrap();
+    let engine = Engine::new(
+        config,
+        repo.path().join("dedalo.toml"),
+        Box::new(git),
+        ledger,
+    );
+
+    let error = engine
+        .scan(None)
+        .expect_err("an absent branch must be an error");
+    let message = error.to_string();
+    assert!(message.contains("does-not-exist"), "{message}");
+    assert!(message.contains("origin/does-not-exist"), "{message}");
+    assert!(
+        message.contains("fetch-depth"),
+        "the message must say how to fix it: {message}"
+    );
+}
+
 #[test]
 fn the_same_history_always_produces_the_same_plan_id() {
     let repo = TempRepo::new("determinism");
-    repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 25, None);
+    repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 25);
 
     let engine = engine_for(&repo);
     let merges = engine.scan(None).unwrap();

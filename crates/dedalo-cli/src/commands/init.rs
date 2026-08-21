@@ -102,7 +102,7 @@ pub fn run(args: &InitArgs, repo: Option<&std::path::PathBuf>, json: bool) -> Re
         .or_else(|| root.file_name().map(|n| n.to_string_lossy().into_owned()))
         .unwrap_or_else(|| "my-project".to_string());
 
-    let branch = current_branch(&root).unwrap_or_else(|| "main".to_string());
+    let branch = default_branch(&root).unwrap_or_else(|| "main".to_string());
     let open_collective = match &args.open_collective {
         Some(slug) => format!("open_collective = \"{slug}\""),
         None => "# open_collective = \"my-project\"".to_string(),
@@ -155,15 +155,38 @@ fn git_root(dir: &std::path::Path) -> Option<std::path::PathBuf> {
     (!path.is_empty()).then(|| std::path::PathBuf::from(path))
 }
 
-fn current_branch(dir: &std::path::Path) -> Option<String> {
-    let output = std::process::Command::new("git")
-        .arg("-C")
-        .arg(dir)
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .output()
-        .ok()?;
-    let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    (output.status.success() && !branch.is_empty() && branch != "HEAD").then_some(branch)
+/// The branch whose merges should earn a payout.
+///
+/// The repository's default branch, not whatever happens to be checked out:
+/// running `dedalo init` from a feature branch should not write that branch
+/// into the config, where it would silently stop resolving the moment the
+/// branch is merged and deleted.
+fn default_branch(dir: &std::path::Path) -> Option<String> {
+    let git = |args: &[&str]| -> Option<String> {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .ok()?;
+        let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        (output.status.success() && !value.is_empty()).then_some(value)
+    };
+
+    // What the remote says its default is.
+    if let Some(head) = git(&["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]) {
+        if let Some(branch) = head.strip_prefix("origin/") {
+            return Some(branch.to_string());
+        }
+    }
+    // Then the conventional names, if they exist here.
+    for candidate in ["main", "master"] {
+        if git(&["rev-parse", "--verify", "--quiet", candidate]).is_some() {
+            return Some(candidate.to_string());
+        }
+    }
+    // Failing both, whatever is checked out, as long as it is a branch.
+    git(&["rev-parse", "--abbrev-ref", "HEAD"]).filter(|b| b != "HEAD")
 }
 
 #[cfg(test)]
