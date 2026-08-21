@@ -71,6 +71,13 @@ refactor(git): move trailer parsing behind the backend trait
 If step 4 fails after the tag exists, fix forward: delete the tag, merge the
 fix, and re-run **Tag**. Never move a tag that a release already published.
 
+### The one tag that does move
+
+`v0` — and `v1` after that — follows the latest release, because
+`uses: 4137314/dedalo@v0` is how a GitHub Action is consumed. It is a pointer
+to an immutable release tag, so nothing that was published ever changes
+underneath someone. Pin `@v0.1.0` instead if you want the workflow frozen.
+
 ## Required repository configuration
 
 | Secret / setting | Where | Used by |

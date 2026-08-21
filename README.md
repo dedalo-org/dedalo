@@ -92,7 +92,7 @@ merged the code:
   with:
     fetch-depth: 0          # attribution needs the full history
 
-- uses: 4137314/dedalo@v1
+- uses: 4137314/dedalo@v0
   with:
     command: plan
     amount: "1000"
