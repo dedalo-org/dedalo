@@ -210,7 +210,12 @@ fn parse_co_authors(body: &str) -> Vec<Author> {
 }
 
 fn strip_prefix_ci<'a>(haystack: &'a str, prefix: &str) -> Option<&'a str> {
-    if haystack.len() >= prefix.len() && haystack[..prefix.len()].eq_ignore_ascii_case(prefix) {
+    // `get` rather than an index: slicing by byte length panics when a
+    // multibyte character straddles the boundary, and commit messages are
+    // full of em-dashes, accents and emoji. Every prefix here is ASCII, so a
+    // slice that is not on a boundary could never have matched anyway.
+    let head = haystack.get(..prefix.len())?;
+    if head.eq_ignore_ascii_case(prefix) {
         Some(&haystack[prefix.len()..])
     } else {
         None
@@ -234,6 +239,22 @@ fn parse_author_line(value: &str) -> Option<Author> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// This parser reads whatever anyone wrote in a commit message. It is
+        /// allowed to find nothing; it is never allowed to panic.
+        #[test]
+        fn never_panics_on_arbitrary_commit_bodies(body in ".{0,200}") {
+            let _ = parse_co_authors(&body);
+        }
+
+        /// Same for the author line itself, trailer prefix already stripped.
+        #[test]
+        fn never_panics_on_arbitrary_author_lines(line in ".{0,120}") {
+            let _ = parse_author_line(&line);
+        }
+    }
 
     #[test]
     fn reads_co_author_trailers_case_insensitively() {
@@ -242,6 +263,28 @@ mod tests {
         assert_eq!(authors.len(), 2);
         assert_eq!(authors[0].email, "ada@example.com");
         assert_eq!(authors[1].name, "Bea");
+    }
+
+    /// Commit messages are prose. A character that straddles the byte length
+    /// of the trailer prefix used to panic the whole scan.
+    #[test]
+    fn survives_multibyte_characters_in_a_commit_body() {
+        for body in [
+            "would reject \u{2014} but only after the fact.",
+            "caf\u{e9}",
+            "\u{1f980} rust",
+            "\u{2014}",
+            "Co-authored-by: \u{c9}va <eva@example.com>",
+            "co-authored-by: \u{1f680} <rocket@example.com>",
+        ] {
+            let authors = parse_co_authors(body);
+            // Only the two real trailers carry an author.
+            if body.to_ascii_lowercase().starts_with("co-authored-by:") {
+                assert_eq!(authors.len(), 1, "failed on {body:?}");
+            } else {
+                assert!(authors.is_empty(), "failed on {body:?}");
+            }
+        }
     }
 
     #[test]
