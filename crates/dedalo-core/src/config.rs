@@ -9,7 +9,7 @@ use crate::error::{Error, Result};
 use crate::identity::{Identity, IdentityMap};
 use crate::money::Asset;
 use crate::treasury::FeeSchedule;
-use crate::wallet::Address;
+use crate::wallet::{Address, AddressKind};
 
 /// Name of the config file, looked up from the working directory upwards.
 pub const CONFIG_FILE: &str = "dedalo.toml";
@@ -208,6 +208,31 @@ impl Config {
         if self.git.branch.trim().is_empty() {
             return Err(Error::config("git.branch must not be empty"));
         }
+        // An address that is well-formed for the wrong chain is still an
+        // address the funds cannot reach. Cross-check it against the chain the
+        // asset actually lives on.
+        if let Some(expected) = AddressKind::for_chain(&self.asset.chain) {
+            let check = |label: &str, address: &Address| -> Result<()> {
+                if address.kind() != expected {
+                    return Err(Error::config(format!(
+                        "{label} is a {:?} address, but asset.chain is `{}`, which expects {}",
+                        address.kind(),
+                        self.asset.chain,
+                        expected.description()
+                    )));
+                }
+                Ok(())
+            };
+            check("wallets.source", &self.wallets.source)?;
+            check("wallets.treasury", &self.wallets.treasury)?;
+            check("wallets.open_collective", &self.wallets.open_collective)?;
+            for identity in &self.identities {
+                if let Some(wallet) = &identity.wallet {
+                    check(&format!("identity `{}`", identity.handle), wallet)?;
+                }
+            }
+        }
+
         for identity in &self.identities {
             if identity.handle.trim().is_empty() {
                 return Err(Error::config("every identity needs a handle"));
