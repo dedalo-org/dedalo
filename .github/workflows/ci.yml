@@ -20,6 +20,9 @@ env:
 
 jobs:
   lint:
+    env:
+      # Outranks rust-toolchain.toml, which would otherwise win.
+      RUSTUP_TOOLCHAIN: stable
     timeout-minutes: 15
     name: fmt + clippy
     runs-on: ubuntu-latest
@@ -38,6 +41,9 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
   test:
+    env:
+      # Outranks rust-toolchain.toml, which would otherwise win.
+      RUSTUP_TOOLCHAIN: stable
     timeout-minutes: 25
     name: test / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -80,10 +86,31 @@ jobs:
         with:
           toolchain: ${{ steps.msrv.outputs.version }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      # Without this the job passed vacuously: rust-toolchain.toml pins 1.91.1
+      # and outranks `rustup default`, so the MSRV was never actually built.
+      # Asserting the version means it can never silently drift again.
+      - name: The toolchain in use must be the declared MSRV
+        env:
+          RUSTUP_TOOLCHAIN: ${{ steps.msrv.outputs.version }}
+          EXPECTED: ${{ steps.msrv.outputs.version }}
+        run: |
+          set -euo pipefail
+          actual=$(rustc --version | cut -d' ' -f2)
+          echo "rustc $actual (expecting $EXPECTED)"
+          if [ "$actual" != "$EXPECTED" ]; then
+            echo "::error title=Wrong toolchain::the MSRV job is building with $actual, not $EXPECTED"
+            exit 1
+          fi
+
       - name: cargo check on the declared MSRV
+        env:
+          RUSTUP_TOOLCHAIN: ${{ steps.msrv.outputs.version }}
         run: cargo check --locked --workspace --all-features --all-targets
 
   docs:
+    env:
+      # Outranks rust-toolchain.toml, which would otherwise win.
+      RUSTUP_TOOLCHAIN: nightly
     timeout-minutes: 20
     name: rustdoc
     runs-on: ubuntu-latest
@@ -103,6 +130,9 @@ jobs:
         run: cargo doc --locked --workspace --no-deps --all-features
 
   coverage:
+    env:
+      # Outranks rust-toolchain.toml, which would otherwise win.
+      RUSTUP_TOOLCHAIN: stable
     timeout-minutes: 30
     name: coverage
     runs-on: ubuntu-latest
@@ -134,6 +164,9 @@ jobs:
           path: lcov.info
 
   packaging:
+    env:
+      # Outranks rust-toolchain.toml, which would otherwise win.
+      RUSTUP_TOOLCHAIN: stable
     name: packaging and distribution
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -200,6 +233,9 @@ jobs:
           fi
 
   semver:
+    env:
+      # Outranks rust-toolchain.toml, which would otherwise win.
+      RUSTUP_TOOLCHAIN: stable
     name: public api compatibility
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
