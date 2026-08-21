@@ -3,7 +3,8 @@
 [![CI](https://github.com/4137314/dedalo/actions/workflows/ci.yml/badge.svg)](https://github.com/4137314/dedalo/actions/workflows/ci.yml)
 [![Nix](https://github.com/4137314/dedalo/actions/workflows/nix.yml/badge.svg)](https://github.com/4137314/dedalo/actions/workflows/nix.yml)
 [![Security](https://github.com/4137314/dedalo/actions/workflows/security.yml/badge.svg)](https://github.com/4137314/dedalo/actions/workflows/security.yml)
-[![docs](https://img.shields.io/badge/docs-api%20reference-blue)](https://4137314.github.io/dedalo/)
+[![docs](https://img.shields.io/badge/docs-api%20reference-blue)](https://4137314.github.io/dedalo/api/)
+[![crates.io](https://img.shields.io/crates/v/dedalo.svg)](https://crates.io/crates/dedalo)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > Turn code merges into sustainable open-source funding.
@@ -51,6 +52,22 @@ Stages 1–3 are pure and offline. The same repository and the same
 `dedalo.toml` always produce the same plan id, on any machine — so a plan
 whose id changed is a plan someone tampered with.
 
+### How this is verified
+
+Not claims — gates. `nix flake check` runs all eight locally, exactly as CI
+runs them: workspace build and tests, clippy, rustfmt, the declared MSRV,
+`actionlint` and `zizmor` over every workflow, `shellcheck` over the scripts,
+and the site's structure and metadata.
+
+The test suite is 66 tests in four layers:
+
+| Layer | What it holds down |
+| --- | --- |
+| unit | the arithmetic, parsing and config, next to the code |
+| property (`proptest`) | the money invariants below, over thousands of generated rounds |
+| end-to-end | the library against real repositories with real merge commits |
+| CLI | exit codes and the `--json` shape that `action.yml` parses |
+
 ### Design guarantees
 
 - **No floating point in money.** Every amount is an integer count of base
@@ -68,8 +85,38 @@ whose id changed is a plan someone tampered with.
 ## Install
 
 ```bash
-cargo install dedalo
+# script — verifies the published SHA-256 before installing
+curl -fsSL https://raw.githubusercontent.com/4137314/dedalo/main/install.sh | sh
+
+cargo install dedalo --locked      # from source
+cargo binstall dedalo              # prebuilt, no compile
+nix run github:4137314/dedalo -- status
+
+docker run --rm -v "$PWD:/repo" ghcr.io/4137314/dedalo plan --amount 1000
 ```
+
+Windows builds are published as `.zip` on the
+[releases page](https://github.com/4137314/dedalo/releases).
+
+### In CI
+
+Dedalo ships as a GitHub Action, because a payout belongs in the pipeline that
+merged the code:
+
+```yaml
+- uses: actions/checkout@v5
+  with:
+    fetch-depth: 0          # attribution needs the full history
+
+- uses: 4137314/dedalo@v0
+  with:
+    command: plan
+    amount: "1000"
+```
+
+Set `command: settle` and `execute: true` to broadcast, with the signing key in
+the environment variable named by `settlement.signer_env`. It defaults to a
+simulation, because the safe thing should be the default.
 
 ## Quickstart
 
@@ -225,19 +272,36 @@ cargo doc --workspace --no-deps --open
 cargo run -p dedalo -- --help
 ```
 
+Building on the library? `dedalo-core`'s `testing` feature gives you throwaway
+repositories with real merge history:
+
+```rust
+use dedalo_core::testing::TempRepo;
+
+let repo = TempRepo::new("example");
+repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 40);
+```
+
 ### Infrastructure
 
 | Concern | How |
 | --- | --- |
 | Reproducible builds | `flake.nix` + `rust-toolchain.toml`, one pinned compiler everywhere |
-| CI | `.github/workflows/ci.yml` — fmt, clippy, tests on Linux/macOS/Windows, MSRV, rustdoc, coverage |
+| CI | `.github/workflows/ci.yml` — fmt, clippy, tests on Linux/macOS/Windows, MSRV, rustdoc, coverage, packaging, public-API compatibility |
 | Reproducibility check | `.github/workflows/nix.yml` — `nix flake check` on Linux and macOS |
 | MSRV | verified, not asserted: `flake.nix` builds the workspace with exactly the compiler `rust-version` promises |
+| Workflow safety | `actionlint` and `zizmor` run as flake checks; every third-party action pinned to a commit |
+| Artifact integrity | SHA-256 checksums plus signed build provenance (`gh attestation verify`) |
 | API docs | `.github/workflows/docs.yml` — rustdoc published to GitHub Pages on every push to `main` |
 | Releases | `.github/workflows/release.yml` — tagged builds for five targets, checksums, GitHub release, crates.io |
 | Supply chain | `.github/workflows/security.yml` — `cargo-deny` and `cargo-audit`, weekly and on manifest changes |
 | Dependencies | Dependabot, grouped weekly PRs for Cargo and Actions |
 | Editors | `.vscode/` for VS Code, `CLAUDE.md` and `.claude/` for AI assistants |
+| Versioning | one version and one tag for the whole workspace, bumped by a reviewable release pull request — see [RELEASING.md](RELEASING.md) |
+| Changelog | generated from Conventional Commit subjects with `git-cliff`; the release notes and `CHANGELOG.md` are the same text |
+| Distribution | install script, `cargo install`, `cargo binstall`, Nix flake, `ghcr.io` image, GitHub Action |
+| Branch policy | `.github/rulesets/main.json`, importable in Settings → Rules |
+| Site | `site/` published to GitHub Pages with the API reference under `/api/` |
 
 Public items in `dedalo-core` must be documented: the crate sets
 `#![warn(missing_docs)]` and CI builds rustdoc with `-D warnings`, so the

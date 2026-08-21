@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dedalo — merge-to-earn funding for open source</title>
+<meta name="description" content="Dedalo turns git merges into deterministic, auditable contributor payouts. Written in Rust, driven by your own repository history.">
+<meta property="og:title" content="Dedalo">
+<meta property="og:description" content="Turn code merges into sustainable open-source funding.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://4137314.github.io/dedalo/">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧭</text></svg>">
+<!-- The page is entirely self-contained: no scripts, no external requests.
+     Every moving part below is CSS or SVG. Saying so explicitly means a
+     future edit that adds a script fails loudly instead of quietly. -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
+<meta name="theme-color" content="#0b0d0b" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f2f1ea" media="(prefers-color-scheme: light)">
+<link rel="canonical" href="https://4137314.github.io/dedalo/">
+<style>
+  /* ===================================================================
+     Dedalo — terminal-native. Monospace throughout, square corners,
+     hairline rules, and a palette narrow enough to stay legible at 2am.
+     =================================================================== */
+
+  :root {
+    color-scheme: dark light;
+
+    --bg:        #0b0d0b;
+    --bg-alt:    #10130f;
+    --bg-raised: #14180f;
+    --line:      #26301f;
+    --line-hot:  #3d5230;
+
+    --fg:        #d4e0c8;
+    --fg-dim:    #7f8f72;
+    --fg-faint:  #4d5a44;
+
+    --green:     #7dff9b;
+    --amber:     #ffc255;
+    --cyan:      #6fe6ff;
+    --magenta:   #ff86c8;
+    --on-accent: #06120a;
+
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Mono", Menlo, Consolas, monospace;
+    --gap: clamp(2.5rem, 6vw, 4.5rem);
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg:        #f2f1ea;
+      --bg-alt:    #eae9df;
+      --bg-raised: #ffffff;
+      --line:      #d2d0c2;
+      --line-hot:  #a8a493;
+
+      --fg:        #14170f;
+      --fg-dim:    #55604a;
+      --fg-faint:  #8b9481;
+
+      --green:     #10743f;
+      --amber:     #8a5a06;
+      --cyan:      #0d6b80;
+      --magenta:   #a32e6e;
+      --on-accent: #ffffff;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--mono);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    /* A faint plotting grid, drawn with gradients so it costs no request. */
+    background-image:
+      linear-gradient(var(--bg-alt) 1px, transparent 1px),
+      linear-gradient(90deg, var(--bg-alt) 1px, transparent 1px);
+    background-size: 48px 48px, 48px 48px;
+    background-position: -1px -1px;
+  }
+
+  a { color: var(--green); text-underline-offset: 3px; }
+  a:hover { color: var(--cyan); }
+
+  pre { overflow-x: auto; margin: 0; }
+  p, li { overflow-wrap: anywhere; }
+
+  .wrap { width: min(100% - 2rem, 68rem); margin-inline: auto; }
+
+  :focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+
+  .skip {
+    position: absolute; left: -9999px; top: 0; z-index: 100;
+    background: var(--green); color: var(--on-accent);
+    padding: 0.5rem 1rem; font-weight: 700;
+  }
+  .skip:focus { left: 0; }
+
+  /* ---- the label every section carries, e.g. `[ 02 · SPLIT ]` -------- */
+  .tag {
+    font-size: 0.7rem; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--fg-faint); display: block; margin-bottom: 0.7rem;
+  }
+  .tag b { color: var(--green); font-weight: 400; }
+
+  /* ================= ticker ==========================================
+     Two copies of the same list scroll past; translating by exactly
+     -50% lands the second copy where the first began, so the loop has
+     no seam and needs no script.
+     =================================================================== */
+  .ticker {
+    border-block: 1px solid var(--line);
+    background: var(--bg-alt);
+    overflow: hidden;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    padding-block: 0.5rem;
+    position: relative;
+  }
+  .ticker::before, .ticker::after {
+    content: ""; position: absolute; top: 0; bottom: 0; width: 4rem; z-index: 2;
+    pointer-events: none;
+  }
+  .ticker::before { left: 0;  background: linear-gradient(90deg, var(--bg-alt), transparent); }
+  .ticker::after  { right: 0; background: linear-gradient(270deg, var(--bg-alt), transparent); }
+
+  .track {
+    display: flex; width: max-content;
+    animation: marquee 46s linear infinite;
+  }
+  .track.reverse { animation-direction: reverse; animation-duration: 62s; }
+  .track i { font-style: normal; padding-inline: 1.6rem; white-space: nowrap; }
+  .track i::after { content: "◆"; color: var(--fg-faint); margin-left: 1.6rem; }
+  .track .hi { color: var(--green); }
+  .track .warn { color: var(--amber); }
+
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+  }
+
+  /* ================= header ========================================== */
+  header {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav { display: flex; align-items: center; gap: 1.4rem; padding: 0.75rem 0; }
+  .brand {
+    font-weight: 700; letter-spacing: 0.04em; margin-right: auto;
+    display: flex; align-items: center; gap: 0.5rem;
+  }
+  .brand svg { width: 20px; height: 20px; display: block; }
+  /* CSS rather than SMIL, so the reduced-motion block below can stop it. */
+  .brand-node { transform-origin: 15px 15px; animation: node 2.6s ease-in-out infinite; }
+  @keyframes node {
+    0%, 100% { transform: scale(1);    opacity: 1; }
+    50%      { transform: scale(1.32); opacity: 0.4; }
+  }
+  .nav a { color: var(--fg-dim); text-decoration: none; font-size: 0.8rem; }
+  .nav a::before { content: "["; color: var(--fg-faint); margin-right: 2px; }
+  .nav a::after  { content: "]"; color: var(--fg-faint); margin-left: 2px; }
+  .nav a:hover { color: var(--green); }
+  @media (max-width: 48rem) { .nav a.hide-sm { display: none; } }
+
+  /* ================= hero ============================================ */
+  .hero { padding: var(--gap) 0 2.5rem; }
+  h1 {
+    font-size: clamp(1.9rem, 5.2vw, 3.1rem); line-height: 1.08;
+    letter-spacing: -0.02em; margin: 0 0 1.1rem; font-weight: 700;
+  }
+  h1 .cursor {
+    display: inline-block; width: 0.55em; height: 0.95em;
+    background: var(--green); vertical-align: -0.08em; margin-left: 0.12em;
+    animation: blink 1.15s steps(1) infinite;
+  }
+  @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+
+  .lede { color: var(--fg-dim); max-width: 46rem; margin: 0 0 1.8rem; font-size: 0.95rem; }
+  .lede b { color: var(--fg); font-weight: 400; }
+
+  .cta { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+  .btn {
+    display: inline-block; padding: 0.5rem 1rem;
+    border: 1px solid var(--line-hot); color: var(--fg);
+    text-decoration: none; font-size: 0.82rem; background: var(--bg-raised);
+    transition: background 0.12s linear, color 0.12s linear, border-color 0.12s linear;
+  }
+  .btn:hover { background: var(--green); color: var(--on-accent); border-color: var(--green); }
+  .btn.primary { background: var(--green); color: var(--on-accent); border-color: var(--green); }
+  .btn.primary:hover { background: transparent; color: var(--green); }
+
+  /* ================= panels ========================================== */
+  .panel { border: 1px solid var(--line); background: var(--bg-raised); }
+  .panel-bar {
+    display: flex; align-items: center; gap: 0.5rem;
+    border-bottom: 1px solid var(--line); padding: 0.4rem 0.8rem;
+    font-size: 0.7rem; color: var(--fg-faint); letter-spacing: 0.1em;
+  }
+  .led { width: 7px; height: 7px; background: var(--line-hot); flex: none; }
+  .led.on { background: var(--green); animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+  .term { margin: 2rem 0 0; }
+  .term pre { padding: 1rem 1.1rem; font-size: 0.78rem; line-height: 1.75; }
+  .term .c { color: var(--fg-faint); }
+  .term .p { color: var(--cyan); }
+  .term .g { color: var(--green); }
+  .term .w { color: var(--amber); }
+  .term .m { color: var(--magenta); }
+
+  /* ================= sections ======================================== */
+  section { padding: var(--gap) 0; border-top: 1px solid var(--line); }
+  h2 {
+    font-size: clamp(1.15rem, 2.6vw, 1.5rem); letter-spacing: -0.01em;
+    margin: 0 0 0.5rem; font-weight: 700;
+  }
+  .sub { color: var(--fg-dim); max-width: 46rem; margin: 0 0 2rem; font-size: 0.88rem; }
+
+  /* ---- animated diagrams -------------------------------------------- */
+  .figure { width: 100%; overflow-x: auto; }
+  .figure svg { display: block; width: 100%; min-width: 40rem; height: auto; }
+
+  .box { fill: var(--bg-raised); stroke: var(--line-hot); stroke-width: 1; }
+  .box-num { fill: var(--green); font-size: 11px; letter-spacing: 0.14em; }
+  .box-title { fill: var(--fg); font-size: 14px; font-weight: 700; }
+  .box-note { fill: var(--fg-dim); font-size: 10.5px; }
+  .wire { stroke: var(--line-hot); stroke-width: 1; fill: none; }
+
+  /* The dashed run between stages advances, so the diagram reads as flow
+     rather than as four static boxes. */
+  .wire-dash {
+    stroke: var(--green); stroke-width: 1.5; fill: none;
+    stroke-dasharray: 5 7; opacity: 0.85;
+    animation: crawl 1.1s linear infinite;
+  }
+  @keyframes crawl { to { stroke-dashoffset: -12; } }
+
+  .packet { fill: var(--green); animation: travel 3.4s ease-in-out infinite; }
+  .packet.b { animation-delay: 0.55s; }
+  .packet.c { animation-delay: 1.1s; }
+  @keyframes travel {
+    0%   { transform: translateX(0);    opacity: 0; }
+    12%  { opacity: 1; }
+    88%  { opacity: 1; }
+    100% { transform: translateX(50px); opacity: 0; }
+  }
+
+  .edge { stroke: var(--amber); stroke-width: 1; stroke-dasharray: 3 4; }
+  .edge-label { fill: var(--amber); font-size: 9.5px; letter-spacing: 0.13em; }
+
+  /* ---- the split ring ------------------------------------------------ */
+  .split-grid {
+    display: grid; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
+    gap: clamp(1.5rem, 4vw, 3rem); align-items: center;
+  }
+  @media (max-width: 44rem) { .split-grid { grid-template-columns: 1fr; } }
+
+  .ring { width: 100%; max-width: 15rem; height: auto; }
+  .ring-track { fill: none; stroke: var(--line); stroke-width: 14; }
+  .ring-seg { fill: none; stroke-width: 14; stroke-linecap: butt; transform-origin: 50% 50%; transform: rotate(-90deg); }
+  /* Circumference at r=70 is 439.82; each arc is drawn to its share.
+     The final proportions live in the rule, not in the animation's `to`, so
+     the ring is correct before the animation starts, after it ends, when it
+     is switched off, and in a screenshot taken mid-load. The keyframe only
+     says where it comes from. */
+  .seg-contrib  { stroke: var(--green); stroke-dasharray: 362.85 439.82; animation: draw 1.4s cubic-bezier(.2,.7,.3,1); }
+  .seg-treasury { stroke: var(--cyan);  stroke-dasharray: 65.97 439.82;  animation: draw 1.4s cubic-bezier(.2,.7,.3,1) 0.18s backwards; }
+  .seg-protocol { stroke: var(--amber); stroke-dasharray: 11 439.82;     animation: draw 1.4s cubic-bezier(.2,.7,.3,1) 0.36s backwards; }
+  @keyframes draw { from { stroke-dasharray: 0 439.82; } }
+
+  .ring-scan {
+    fill: none; stroke: var(--fg-faint); stroke-width: 1; stroke-dasharray: 2 6;
+    transform-origin: 50% 50%; animation: spin 26s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .ring-center { fill: var(--fg); font-size: 15px; font-weight: 700; text-anchor: middle; }
+  .ring-sub { fill: var(--fg-faint); font-size: 9px; letter-spacing: 0.16em; text-anchor: middle; }
+
+  .legend { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.55rem; }
+  .legend li { display: grid; grid-template-columns: 0.85rem 4.6rem 1fr; gap: 0.75rem; align-items: baseline; font-size: 0.85rem; }
+  .legend span { width: 10px; height: 10px; display: block; align-self: center; }
+  .legend b { color: var(--fg); font-weight: 700; }
+  .legend em { font-style: normal; color: var(--fg-dim); }
+  .sw-contrib { background: var(--green); }
+  .sw-treasury { background: var(--cyan); }
+  .sw-protocol { background: var(--amber); }
+
+  /* ---- card grids ---------------------------------------------------- */
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+  }
+  .grid > * { background: var(--bg-raised); padding: 1rem 1.1rem; }
+  .grid h3 { margin: 0 0 0.4rem; font-size: 0.85rem; color: var(--green); font-weight: 700; }
+  .grid h3::before { content: "▸ "; color: var(--fg-faint); }
+  .grid p { margin: 0; font-size: 0.82rem; color: var(--fg-dim); }
+
+  /* ---- install ------------------------------------------------------- */
+  .tabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 0.8rem; }
+  .tabs .panel pre { padding: 0.85rem 1rem; font-size: 0.76rem; color: var(--fg); }
+  .tabs .panel pre .c { color: var(--fg-faint); }
+
+  /* ---- status -------------------------------------------------------- */
+  .warnbox { border: 1px solid var(--amber); background: var(--bg-raised); padding: 1.1rem 1.2rem; }
+  .warnbox h3 { margin: 0 0 0.5rem; font-size: 0.9rem; color: var(--amber); }
+  .warnbox p { margin: 0 0 0.6rem; font-size: 0.85rem; color: var(--fg-dim); }
+  .warnbox p:last-child { margin: 0; }
+
+  ul.check { list-style: none; padding: 0; margin: 1.6rem 0 0; display: grid; gap: 0.35rem; }
+  ul.check li { font-size: 0.85rem; color: var(--fg-dim); padding-left: 1.9rem; position: relative; }
+  ul.check li::before { position: absolute; left: 0; font-size: 0.78rem; }
+  li.done::before { content: "[✓]"; color: var(--green); }
+  li.todo::before { content: "[ ]"; color: var(--fg-faint); }
+
+  /* ---- footer -------------------------------------------------------- */
+  footer { border-top: 1px solid var(--line); padding: 2rem 0 3rem; font-size: 0.78rem; color: var(--fg-faint); }
+  .foot { display: flex; flex-wrap: wrap; gap: 1.2rem; align-items: center; }
+  .foot a { color: var(--fg-dim); text-decoration: none; }
+  .foot a:hover { color: var(--green); }
+  .foot .sep { margin-left: auto; }
+
+  /* ===================================================================
+     Motion is decoration here, never information. Switching it off must
+     leave the page complete: the ticker becomes a scrollable strip, the
+     ring stays at its final proportions.
+     =================================================================== */
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .track, .track.reverse { animation: none; }
+    .ticker { overflow-x: auto; }
+    .ticker::before, .ticker::after { display: none; }
+    .wire-dash, .packet, .ring-scan, .led.on, .brand-node, h1 .cursor { animation: none; }
+    .packet { opacity: 1; }
+    .seg-contrib, .seg-treasury, .seg-protocol { animation: none; }
+    .btn { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="ticker" aria-hidden="true">
+  <div class="track">
+    <i class="hi">● system status: pre-release</i><i class="warn">on-chain broadcast: not live</i><i>settlement backend: dry-run</i><i>ledger: append-only</i><i class="hi">66 tests passing</i><i class="hi">8 gates green</i><i>msrv 1.85.0 verified</i><i>licence mit</i>
+    <i class="hi">● system status: pre-release</i><i class="warn">on-chain broadcast: not live</i><i>settlement backend: dry-run</i><i>ledger: append-only</i><i class="hi">66 tests passing</i><i class="hi">8 gates green</i><i>msrv 1.85.0 verified</i><i>licence mit</i>
+  </div>
+</div>
+
+<header>
+  <nav class="nav wrap" aria-label="Primary">
+    <div class="brand">
+      <!-- A merge glyph: two branches converging on a node that keeps time. -->
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M6 3v6a6 6 0 0 0 6 6h1" stroke="currentColor"/>
+        <path d="M18 3v6" stroke="currentColor" opacity="0.45"/>
+        <circle cx="6" cy="3" r="1.9" fill="currentColor" stroke="none"/>
+        <circle cx="18" cy="3" r="1.9" fill="currentColor" stroke="none" opacity="0.45"/>
+        <circle class="brand-node" cx="15" cy="15" r="2.4" fill="none" stroke="currentColor"/>
+      </svg>
+      dedalo
+    </div>
+    <a href="#how">how</a>
+    <a href="#split" class="hide-sm">split</a>
+    <a href="#guarantees" class="hide-sm">guarantees</a>
+    <a href="#install">install</a>
+    <a href="api/">docs</a>
+    <a href="https://github.com/4137314/dedalo">source</a>
+  </nav>
+</header>
+
+<main id="main">
+
+  <div class="wrap hero">
+    <span class="tag"><b>◆</b> merge-to-earn · rust · git-native</span>
+    <h1>Turn code merges into<br>sustainable open-source funding<span class="cursor"></span></h1>
+    <p class="lede">
+      Dedalo reads merge history straight from your repository, scores who
+      contributed what, and distributes a funding round to contributor wallets —
+      taking a protocol fee that flows to the network's Open Collective, so
+      <b>the network funds itself</b> instead of depending on grants.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="#install">get started</a>
+      <a class="btn" href="api/">api reference</a>
+      <a class="btn" href="https://github.com/4137314/dedalo">source</a>
+    </div>
+
+    <figure class="panel term" role="group" aria-label="Example output of dedalo plan">
+      <div class="panel-bar"><span class="led on"></span><span class="led"></span><span class="led"></span>&nbsp;dedalo plan --amount 1000</div>
+<pre><span class="c">$</span> dedalo plan --amount 1000
+
+<span class="p">Round</span> ded106bd7281  <span class="c">2 merges on main → af3141b5</span>
+<span class="p">Gross</span> 1000 USDC
+
+PAYEE            KIND         WALLET           SHARE  AMOUNT
+ada              contributor  0xAdA00000000…  41.25%   412.5
+bea              contributor  0xBeA00000000…  41.25%   412.5
+treasury         treasury     0x22222222222…  15.00%     150
+demo-collective  <span class="g">protocol</span>     0x33333333333…   2.50%      25
+
+  contributors               825 USDC
+  treasury                   150 USDC
+  protocol fee                25 USDC  <span class="c">→ open collective</span>
+
+<span class="w">warning:</span> 1 contributor earned a share but has no wallet:
+  Cy &lt;cy@example.com&gt;  140 points
+  <span class="c">their share was redistributed; link them with `dedalo identity link`</span>
+</pre>
+    </figure>
+  </div>
+
+  <div class="ticker" aria-hidden="true">
+    <div class="track reverse">
+      <i>contributors 82.50%</i><i>treasury 15.00%</i><i class="warn">protocol fee 2.50%</i><i>split: largest remainder</i><i class="hi">no floating point</i><i>amounts: u128 base units</i><i>plans: content addressed</i><i>rounds: idempotent</i>
+      <i>contributors 82.50%</i><i>treasury 15.00%</i><i class="warn">protocol fee 2.50%</i><i>split: largest remainder</i><i class="hi">no floating point</i><i>amounts: u128 base units</i><i>plans: content addressed</i><i>rounds: idempotent</i>
+    </div>
+  </div>
+
+  <section id="how" class="wrap" aria-labelledby="how-title">
+    <span class="tag"><b>01</b> · pipeline</span>
+    <h2 id="how-title">Four stages, one boundary that matters</h2>
+    <p class="sub">
+      Everything that decides <em>who gets what</em> happens offline and
+      deterministically. Only the last stage touches the outside world.
+    </p>
+
+    <div class="figure">
+      <svg viewBox="0 0 920 210" role="img"
+           aria-label="Pipeline: git reads merges, attribution scores them, payout builds a plan — all pure and offline — then settlement executes it, the only stage with side effects.">
+        <!-- the four stages -->
+        <g>
+          <rect class="box" x="5"   y="58" width="190" height="92"/>
+          <text class="box-num"   x="21"  y="82">01 · GIT</text>
+          <text class="box-title" x="21"  y="106">Read the merges</text>
+          <text class="box-note"  x="21"  y="126">merge commits, their</text>
+          <text class="box-note"  x="21"  y="139">commits, their diffs</text>
+        </g>
+        <g>
+          <rect class="box" x="245" y="58" width="190" height="92"/>
+          <text class="box-num"   x="261" y="82">02 · ATTRIBUTION</text>
+          <text class="box-title" x="261" y="106">Score the work</text>
+          <text class="box-note"  x="261" y="126">integer weights from</text>
+          <text class="box-note"  x="261" y="139">rules you declare</text>
+        </g>
+        <g>
+          <rect class="box" x="485" y="58" width="190" height="92"/>
+          <text class="box-num"   x="501" y="82">03 · PAYOUT</text>
+          <text class="box-title" x="501" y="106">Build the plan</text>
+          <text class="box-note"  x="501" y="126">fees off the top, rest</text>
+          <text class="box-note"  x="501" y="139">split by weight</text>
+        </g>
+        <g>
+          <rect class="box" x="725" y="58" width="190" height="92"/>
+          <text class="box-num"   x="741" y="82">04 · SETTLEMENT</text>
+          <text class="box-title" x="741" y="106">Execute it</text>
+          <text class="box-note"  x="741" y="126">re-verify, then</text>
+          <text class="box-note"  x="741" y="139">broadcast</text>
+        </g>
+
+        <!-- flowing connectors -->
+        <path class="wire-dash" d="M195 104 H245"/>
+        <path class="wire-dash" d="M435 104 H485"/>
+        <path class="wire-dash" d="M675 104 H725"/>
+        <circle class="packet"   cx="197" cy="104" r="2.6"/>
+        <circle class="packet b" cx="437" cy="104" r="2.6"/>
+        <circle class="packet c" cx="677" cy="104" r="2.6"/>
+
+        <!-- the boundary between what is reproducible and what is not -->
+        <line class="edge" x1="700" y1="14" x2="700" y2="196"/>
+        <text class="edge-label" x="692" y="26" text-anchor="end">PURE · OFFLINE · REPRODUCIBLE</text>
+        <text class="edge-label" x="708" y="26">SIDE EFFECTS</text>
+        <text class="box-note" x="692" y="186" text-anchor="end" fill="currentColor" opacity="0.5">same repo + same config = same plan id</text>
+      </svg>
+    </div>
+  </section>
+
+  <section id="split" class="wrap" aria-labelledby="split-title">
+    <span class="tag"><b>02</b> · treasury</span>
+    <h2 id="split-title">Where a round goes</h2>
+    <p class="sub">Cut in a fixed order, off the top, with the numbers under your control.</p>
+
+    <div class="split-grid">
+      <svg class="ring" viewBox="0 0 200 200" role="img"
+           aria-label="82.5 percent to contributors, 15 percent to the project treasury, 2.5 percent protocol fee to the network's Open Collective.">
+        <circle class="ring-track" cx="100" cy="100" r="70"/>
+        <circle class="ring-scan"  cx="100" cy="100" r="86"/>
+        <!-- Arcs at r=70: circumference 439.82. Offsets place each segment
+             after the one before it, counter-clockwise from twelve o'clock. -->
+        <circle class="ring-seg seg-contrib"  cx="100" cy="100" r="70" stroke-dashoffset="0"/>
+        <circle class="ring-seg seg-treasury" cx="100" cy="100" r="70" stroke-dashoffset="-362.85"/>
+        <circle class="ring-seg seg-protocol" cx="100" cy="100" r="70" stroke-dashoffset="-428.82"/>
+        <text class="ring-center" x="100" y="98">1000</text>
+        <text class="ring-sub"    x="100" y="114">USDC ROUND</text>
+      </svg>
+
+      <ul class="legend">
+        <li><span class="sw-contrib"></span><b>82.50%</b><em>contributors, by attribution weight — and any rounding dust lands here</em></li>
+        <li><span class="sw-treasury"></span><b>15.00%</b><em>your project's own reserve, growing with its activity</em></li>
+        <li><span class="sw-protocol"></span><b>2.50%</b><em>protocol fee to the network's Open Collective — how the network funds itself</em></li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="guarantees" class="wrap" aria-labelledby="g-title">
+    <span class="tag"><b>03</b> · invariants</span>
+    <h2 id="g-title">What the code guarantees</h2>
+    <p class="sub">
+      Not claims — gates. Each of these is held down by property tests that
+      hammer it with thousands of generated rounds.
+    </p>
+    <div class="grid">
+      <div>
+        <h3>no floating point in money</h3>
+        <p>Every amount is an integer count of base units. Percentages are basis points. Nothing rounds by accident.</p>
+      </div>
+      <div>
+        <h3>splits conserve the total</h3>
+        <p>Largest-remainder distribution: a round sums back to exactly what you funded. No dust created, none stranded.</p>
+      </div>
+      <div>
+        <h3>fees round down</h3>
+        <p>Rounding remainders land in the contributor pool, never in the protocol's pocket.</p>
+      </div>
+      <div>
+        <h3>one wallet, one transfer</h3>
+        <p>A contributor with several git emails is paid once, so a batch cannot double-send.</p>
+      </div>
+      <div>
+        <h3>nobody is silently dropped</h3>
+        <p>Someone who earned a share but has no wallet on file is reported in the plan, not quietly removed.</p>
+      </div>
+      <div>
+        <h3>rounds are idempotent</h3>
+        <p>The ledger refuses to settle the same plan twice, so a retried CI job cannot pay twice.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="install" class="wrap" aria-labelledby="i-title">
+    <span class="tag"><b>04</b> · install</span>
+    <h2 id="i-title">Install</h2>
+    <p class="sub">
+      Every archive ships a SHA-256 checksum and signed build provenance. The
+      installer refuses to run without verifying the checksum first.
+    </p>
+    <div class="tabs">
+      <div class="panel">
+        <div class="panel-bar"><span class="led on"></span>&nbsp;script</div>
+<pre>curl -fsSL https://raw.githubusercontent.com/\
+4137314/dedalo/main/install.sh | sh</pre>
+      </div>
+      <div class="panel">
+        <div class="panel-bar"><span class="led on"></span>&nbsp;cargo</div>
+<pre>cargo install dedalo --locked
+<span class="c"># or, without compiling:</span>
+cargo binstall dedalo</pre>
+      </div>
+      <div class="panel">
+        <div class="panel-bar"><span class="led on"></span>&nbsp;nix</div>
+<pre>nix run github:4137314/dedalo -- status</pre>
+      </div>
+      <div class="panel">
+        <div class="panel-bar"><span class="led on"></span>&nbsp;container</div>
+<pre>docker run --rm -v "$PWD:/repo" \
+  ghcr.io/4137314/dedalo plan --amount 1000</pre>
+      </div>
+    </div>
+
+    <h2 style="margin-top:2.5rem">Or run it in CI</h2>
+    <p class="sub">A payout belongs in the pipeline that merged the code.</p>
+    <div class="panel">
+      <div class="panel-bar"><span class="led on"></span>&nbsp;.github/workflows/payouts.yml</div>
+<pre>- uses: actions/checkout@v5
+  with:
+    fetch-depth: 0        <span class="c"># attribution needs the full history</span>
+
+- uses: 4137314/dedalo@v0
+  with:
+    command: plan
+    amount: "1000"</pre>
+    </div>
+  </section>
+
+  <section id="status" class="wrap" aria-labelledby="s-title">
+    <span class="tag"><b>05</b> · status</span>
+    <h2 id="s-title">Project status</h2>
+    <div class="warnbox">
+      <h3>⚠ on-chain broadcasting is not live yet</h3>
+      <p>
+        The pipeline from git history to a verified, reproducible payout plan is
+        implemented and tested end to end. The <code>evm</code> backend validates
+        its configuration, re-verifies the plan and builds the exact distributor
+        call — then stops before signing.
+      </p>
+      <p>
+        Shipping an unaudited signing path would put real funds at risk. Until the
+        distributor contract is deployed and audited, use the default
+        <code>dry-run</code> backend: identical numbers, minus the broadcast.
+      </p>
+    </div>
+    <ul class="check">
+      <li class="done">git-derived attribution with co-author support</li>
+      <li class="done">deterministic, content-addressed payout plans</li>
+      <li class="done">fee schedule with protocol / treasury / contributor split</li>
+      <li class="done">append-only ledger with idempotent rounds</li>
+      <li class="done">github action, container image, provenance-signed releases</li>
+      <li class="todo">audited distributor contract and evm broadcasting</li>
+      <li class="todo">review-weighted attribution — reviewers earn too</li>
+    </ul>
+  </section>
+
+  <section id="contribute" class="wrap" aria-labelledby="c-title">
+    <span class="tag"><b>06</b> · contribute</span>
+    <h2 id="c-title">Contributing pays</h2>
+    <p class="sub">
+      Dedalo is open source, MIT licensed, and built by the community. If you
+      care about Rust, developer tooling and sustainable open-source economics,
+      contributions are welcome — and they are literally what the project pays
+      out for.
+    </p>
+    <div class="cta">
+      <a class="btn" href="https://github.com/4137314/dedalo/blob/main/CONTRIBUTING.md">contributing guide</a>
+      <a class="btn" href="https://github.com/4137314/dedalo/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22">good first issues</a>
+      <a class="btn" href="https://github.com/4137314/dedalo/blob/main/SECURITY.md">security policy</a>
+    </div>
+  </section>
+
+</main>
+
+<div class="ticker" aria-hidden="true">
+  <div class="track">
+    <i class="hi">merge → attribute → plan → settle</i><i>git is the source of truth</i><i>plans reviewable in a pull request</i><i class="hi">recomputable by anyone</i><i>ci/cd native</i><i>written in rust</i><i class="warn">dry-run by default</i>
+    <i class="hi">merge → attribute → plan → settle</i><i>git is the source of truth</i><i>plans reviewable in a pull request</i><i class="hi">recomputable by anyone</i><i>ci/cd native</i><i>written in rust</i><i class="warn">dry-run by default</i>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap foot">
+    <span>mit licensed</span>
+    <a href="https://github.com/4137314/dedalo">github</a>
+    <a href="api/">api reference</a>
+    <a href="https://crates.io/crates/dedalo">crates.io</a>
+    <a href="https://github.com/4137314/dedalo/blob/main/CHANGELOG.md">changelog</a>
+    <span class="sep">built with rust 🦀</span>
+  </div>
+</footer>
+
+</body>
+</html>

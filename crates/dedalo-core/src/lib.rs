@@ -44,6 +44,10 @@ pub mod ledger;
 pub mod money;
 pub mod payout;
 pub mod settlement;
+
+#[cfg(feature = "testing")]
+pub mod testing;
+
 pub mod treasury;
 
 pub use config::Config;

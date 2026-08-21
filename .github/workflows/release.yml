@@ -1,50 +1,88 @@
 name: Release
 
 on:
+  # A tag pushed by a person triggers this directly.
   push:
     tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
       tag:
+        description: "Existing tag to build, e.g. v0.1.0"
+        required: true
+        type: string
+  # A tag created by a workflow does not raise a `push` event — GitHub
+  # suppresses events caused by GITHUB_TOKEN to prevent recursion. So the Tag
+  # workflow calls this one directly instead of hoping an event fires.
+  workflow_call:
+    inputs:
+      tag:
         description: "Tag to build, e.g. v0.1.0"
         required: true
+        type: string
+    secrets:
+      CARGO_REGISTRY_TOKEN:
+        description: "Token used to publish to crates.io"
+        required: false
 
 permissions:
   contents: read
 
 env:
   CARGO_TERM_COLOR: always
+  # Resolved once, here, rather than repeated at every use site. On a tag push
+  # `inputs.tag` is unset and `github.ref_name` is the tag; on a dispatch or a
+  # workflow_call it is the other way round. Neither can be a falsy non-empty
+  # string, so the fallback is exact.
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }} # zizmor: ignore[unsound-ternary]
 
 jobs:
   verify:
-    name: verify the tag builds and passes
+    timeout-minutes: 30
+    name: verify the tag
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
         with:
+          toolchain: stable
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
       - name: Configure git for the end-to-end tests
         run: |
           git config --global user.name "CI"
           git config --global user.email "ci@example.com"
           git config --global init.defaultBranch main
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - run: cargo test --workspace --all-features
+      - run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --locked --workspace --all-features
+
       - name: The tag must match the workspace version
+        id: version
+        env:
+          TAG: ${{ env.RELEASE_TAG }}
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          set -euo pipefail
+          tag="${TAG#v}"
+          version=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
           if [ "$tag" != "$version" ]; then
             echo "tag v$tag does not match workspace version $version" >&2
             exit 1
           fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: The changelog must describe this version
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: scripts/changelog-section.py "$VERSION" > /dev/null
 
   binaries:
+    timeout-minutes: 45
     name: ${{ matrix.target }}
     needs: verify
     runs-on: ${{ matrix.os }}
@@ -56,47 +94,57 @@ jobs:
             os: ubuntu-latest
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
           - target: aarch64-apple-darwin
             os: macos-latest
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-15-intel
           - target: x86_64-pc-windows-msvc
             os: windows-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: stable
           targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
       - name: Install musl tooling
         if: endsWith(matrix.target, '-musl')
         run: sudo apt-get update && sudo apt-get install -y musl-tools
       - name: Build
-        run: cargo build --release --locked -p dedalo --target ${{ matrix.target }}
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo build --release --locked -p dedalo --target "$TARGET"
       - name: Package
         shell: bash
+        env:
+          TAG: ${{ env.RELEASE_TAG }}
+          TARGET: ${{ matrix.target }}
         run: |
-          name="dedalo-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          set -euo pipefail
+          name="dedalo-${TAG}-${TARGET}"
           mkdir -p "dist/$name"
-          if [ -f "target/${{ matrix.target }}/release/dedalo.exe" ]; then
-            cp "target/${{ matrix.target }}/release/dedalo.exe" "dist/$name/"
+          if [ -f "target/${TARGET}/release/dedalo.exe" ]; then
+            cp "target/${TARGET}/release/dedalo.exe" "dist/$name/"
           else
-            cp "target/${{ matrix.target }}/release/dedalo" "dist/$name/"
+            cp "target/${TARGET}/release/dedalo" "dist/$name/"
           fi
-          cp README.md LICENSE "dist/$name/"
+          cp README.md LICENSE CHANGELOG.md "dist/$name/"
           cd dist
-          if [[ "${{ matrix.target }}" == *windows* ]]; then
-            7z a "$name.zip" "$name" > /dev/null
-          else
-            tar czf "$name.tar.gz" "$name"
-          fi
+          case "$TARGET" in
+            *windows*) 7z a "$name.zip" "$name" > /dev/null ;;
+            *) tar czf "$name.tar.gz" "$name" ;;
+          esac
           # Checksums let anyone verify a download against the release page.
-          for f in "$name".*; do
+          for f in "$name".tar.gz "$name".zip; do
+            [ -f "$f" ] || continue
             openssl dgst -sha256 -r "$f" | awk '{print $1"  "$2}' > "$f.sha256"
           done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dedalo-${{ matrix.target }}
           path: |
@@ -105,36 +153,139 @@ jobs:
             dist/*.sha256
 
   github-release:
-    name: publish github release
-    needs: binaries
+    timeout-minutes: 15
+    name: publish the github release
+    needs: [verify, binaries]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # Signing the provenance statement.
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+      - name: Release notes come from the changelog
+        shell: bash
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+          TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          # The backticks below are literal markdown code spans, not command
+          # substitution, which is exactly why they are in single quotes.
+          # shellcheck disable=SC2016
+          {
+            scripts/changelog-section.py "$VERSION"
+            echo
+            echo "### Install"
+            echo
+            echo '```bash'
+            echo 'curl -fsSL https://raw.githubusercontent.com/4137314/dedalo/main/install.sh | sh'
+            echo 'cargo install dedalo --locked'
+            echo 'cargo binstall dedalo'
+            echo "nix profile install github:4137314/dedalo/${TAG}"
+            echo '```'
+            echo
+            echo 'Every archive ships a `.sha256` checksum, and carries signed'
+            echo 'build provenance:'
+            echo
+            echo '```bash'
+            echo 'gh attestation verify dedalo-*.tar.gz --repo 4137314/dedalo'
+            echo '```'
+          } > release-notes.md
+      # Signed provenance ties every archive to this repository, this workflow
+      # and this commit, so a download can be checked against its origin:
+      #   gh attestation verify dedalo-*.tar.gz --repo 4137314/dedalo
+      - uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
         with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
+
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          body_path: release-notes.md
           files: dist/*
-          generate_release_notes: true
           fail_on_unmatched_files: true
 
   crates-io:
+    timeout-minutes: 20
     name: publish to crates.io
-    needs: binaries
+    needs: [verify, binaries]
     runs-on: ubuntu-latest
     environment: crates-io
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: stable
       - name: Publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        # The library has to land first: the CLI depends on the published
-        # version of it.
+        # The library lands first: the CLI depends on the published version.
         run: |
           cargo publish --locked -p dedalo-core
           cargo publish --locked -p dedalo
+
+  container:
+    timeout-minutes: 45
+    name: publish the container image
+    needs: [verify, binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Lay out the binaries the image expects
+        env:
+          TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          mkdir -p image/amd64 image/arm64
+          tar xzf "dist/dedalo-${TAG}-x86_64-unknown-linux-musl.tar.gz" -C dist
+          tar xzf "dist/dedalo-${TAG}-aarch64-unknown-linux-musl.tar.gz" -C dist
+          cp "dist/dedalo-${TAG}-x86_64-unknown-linux-musl/dedalo" image/amd64/dedalo
+          cp "dist/dedalo-${TAG}-aarch64-unknown-linux-musl/dedalo" image/arm64/dedalo
+          chmod +x image/*/dedalo
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
