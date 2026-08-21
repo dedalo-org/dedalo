@@ -194,10 +194,16 @@ jobs:
           set -euo pipefail
           binary=target/x86_64-unknown-linux-musl/release/dedalo
           file "$binary"
-          if ldd "$binary" 2>&1 | grep -qv "not a dynamic executable"; then
+          # Ask the ELF headers, not ldd: its wording depends on the libc and
+          # on whether the binary is static-pie ("statically linked") or a
+          # plain static ("not a dynamic executable"). A binary with no shared
+          # dependencies has no NEEDED entries, whichever form it takes.
+          if readelf -d "$binary" 2>/dev/null | grep -q 'NEEDED'; then
+            readelf -d "$binary" | grep 'NEEDED' || true
             echo "::error title=Not static::the musl build links against shared libraries"
             exit 1
           fi
+          echo "static: no NEEDED entries in the dynamic section"
 
       # Exercise the Dockerfile exactly as the release does, then prove the
       # image works on a repository it did not build: non-root user, git
