@@ -1,0 +1,48 @@
+# Path-based labels applied to pull requests by .github/workflows/triage.yml.
+
+"area: money":
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/dedalo-core/src/money.rs
+          - crates/dedalo-core/src/treasury.rs
+          - crates/dedalo-core/src/payout.rs
+
+"area: attribution":
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/dedalo-core/src/attribution.rs
+          - crates/dedalo-core/src/identity.rs
+
+"area: git":
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/dedalo-core/src/git/**
+
+"area: settlement":
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/dedalo-core/src/settlement/**
+          - crates/dedalo-core/src/ledger.rs
+
+"area: cli":
+  - changed-files:
+      - any-glob-to-any-file:
+          - crates/dedalo-cli/**
+
+"area: docs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - site/**
+
+infrastructure:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**
+          - flake.nix
+          - flake.lock
+          - deny.toml
+          - action.yml
+          - Dockerfile
+          - install.sh
+          - rust-toolchain.toml

@@ -1,0 +1,71 @@
+name: Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      level:
+        description: "Bump level, or an explicit version like 1.2.0"
+        required: true
+        default: patch
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  release-pull-request:
+    name: open the release pull request
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # git-cliff needs the tags and the full history to diff against.
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@git-cliff
+
+      - name: Bump the workspace version
+        id: bump
+        run: |
+          version=$(scripts/bump-version.sh "${{ inputs.level }}")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Bumped to $version" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fold the pending changes into the changelog
+        run: |
+          git cliff --unreleased --tag "v${{ steps.bump.outputs.version }}" --strip all \
+            | scripts/update-changelog.py "${{ steps.bump.outputs.version }}"
+
+      - name: Show what the release will say
+        run: |
+          {
+            echo '### Changelog diff'
+            echo '```diff'
+            git diff -- CHANGELOG.md
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: release/v${{ steps.bump.outputs.version }}
+          base: main
+          commit-message: "chore(release): v${{ steps.bump.outputs.version }}"
+          title: "chore(release): v${{ steps.bump.outputs.version }}"
+          labels: release
+          delete-branch: true
+          body: |
+            Release **v${{ steps.bump.outputs.version }}**.
+
+            This pull request bumps the workspace version, refreshes
+            `Cargo.lock`, and adds the changelog section below.
+
+            Before merging, read the changelog diff the way a user would. Edit
+            this branch directly if a generated line is unclear — the file, not
+            the workflow, is the published record.
+
+            Merging this triggers the **Tag** workflow, which pushes
+            `v${{ steps.bump.outputs.version }}` and starts the release build.

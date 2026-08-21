@@ -3,6 +3,11 @@ name: Docs
 on:
   push:
     branches: [main]
+    paths:
+      - "crates/**"
+      - "site/**"
+      - "Cargo.*"
+      - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 concurrency:
@@ -14,31 +19,51 @@ permissions:
 
 jobs:
   build:
-    name: build api reference
+    name: build the site
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
-      - name: cargo doc
+
+      - name: Build the API reference
         env:
-          RUSTDOCFLAGS: -D warnings --cfg docsrs --enable-index-page -Zunstable-options
+          # Broken intra-doc links and undocumented public items fail the
+          # build: the reference is generated, so it has to stay correct.
+          RUSTDOCFLAGS: -D warnings --cfg docsrs
         run: cargo doc --workspace --no-deps --all-features
-      - name: Land visitors on the core crate
+
+      - name: Assemble the published tree
         run: |
-          cat > target/doc/index.html <<'HTML'
+          set -eu
+          mkdir -p _site
+          # The landing page at /, the API reference at /api/.
+          cp -r site/. _site/
+          mkdir -p _site/api
+          cp -r target/doc/. _site/api/
+          cat > _site/api/index.html <<'HTML'
           <!doctype html>
           <meta charset="utf-8">
           <title>Dedalo — API reference</title>
           <meta http-equiv="refresh" content="0; url=dedalo_core/index.html">
           <link rel="canonical" href="dedalo_core/index.html">
-          <p>Redirecting to <a href="dedalo_core/index.html">the Dedalo core API reference</a>.</p>
+          <p>Redirecting to the <a href="dedalo_core/index.html">dedalo_core</a> API reference.</p>
           HTML
           # Pages must not run Jekyll over rustdoc's output.
-          touch target/doc/.nojekyll
+          touch _site/.nojekyll
+
+      - name: Check the links the landing page promises
+        run: |
+          set -eu
+          test -f _site/index.html
+          test -f _site/404.html
+          test -f _site/api/dedalo_core/index.html
+          test -f _site/api/dedalo/index.html
+          echo "site tree looks complete" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/upload-pages-artifact@v4
         with:
-          path: target/doc
+          path: _site
 
   deploy:
     name: deploy to github pages

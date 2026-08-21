@@ -1,0 +1,72 @@
+# Canonical label set. Edited here, applied by .github/workflows/labels.yml —
+# so the taxonomy is reviewable instead of living in one maintainer's UI.
+
+# --- type: what kind of change is this? -------------------------------------
+- name: bug
+  color: d73a4a
+  description: Something behaves differently than documented
+- name: enhancement
+  color: a2eeef
+  description: A capability Dedalo should have
+- name: documentation
+  color: 0075ca
+  description: Docs, rustdoc, the site, or examples
+- name: refactor
+  color: c5def5
+  description: Behaviour-preserving change to structure
+- name: infrastructure
+  color: bfd4f2
+  description: CI, Nix, packaging, release tooling
+
+# --- area: which part of the system? ----------------------------------------
+- name: "area: money"
+  color: fbca04
+  description: Amounts, splits, fees — changes here need balance tests
+- name: "area: attribution"
+  color: fef2c0
+  description: Scoring merges into contribution weights
+- name: "area: git"
+  color: d4c5f9
+  description: Reading history from a repository
+- name: "area: settlement"
+  color: e99695
+  description: Executing a plan on chain
+- name: "area: cli"
+  color: c2e0c6
+  description: The dedalo binary and its output
+- name: "area: docs"
+  color: 0075ca
+  description: README, rustdoc, the published site
+
+# --- state: where is it in the process? -------------------------------------
+- name: "needs triage"
+  color: ededed
+  description: Not yet assessed by a maintainer
+- name: "needs discussion"
+  color: d876e3
+  description: The approach is not settled yet
+- name: blocked
+  color: b60205
+  description: Waiting on something outside this repository
+- name: "good first issue"
+  color: 7057ff
+  description: A well-scoped starting point for a new contributor
+- name: "help wanted"
+  color: 008672
+  description: Maintainers would welcome someone picking this up
+
+# --- severity: reserved for anything touching real money --------------------
+- name: "security"
+  color: b60205
+  description: Reported privately; handled under SECURITY.md
+- name: "pays wrong amount"
+  color: b60205
+  description: Highest priority — a payout is or could be incorrect
+
+# --- release ----------------------------------------------------------------
+- name: breaking
+  color: b60205
+  description: Requires a major version bump
+- name: "release"
+  color: 5319e7
+  description: Version bump and changelog, opened by release-plz

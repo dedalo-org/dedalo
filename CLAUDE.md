@@ -84,6 +84,14 @@ change passes that, it will pass CI.
   exactly the compiler `rust-version` names, so raising it is a deliberate
   change. Avoid newer language features — let-chains in particular.
 
+## Releasing
+
+One version and one tag for the whole workspace. Never edit the version by
+hand: `scripts/bump-version.sh` is the only thing allowed to change it, and the
+**Version** workflow drives it. `CHANGELOG.md` is generated from Conventional
+Commit subjects, so a pull request title is a release note. Full policy in
+[RELEASING.md](RELEASING.md).
+
 ## Things to be careful about
 
 - **Never fabricate on-chain behaviour.** The `evm` backend deliberately
@@ -97,6 +105,10 @@ change passes that, it will pass CI.
   Do not add them to `.gitignore`.
 - **Do not weaken a test to make it pass.** If an amount no longer balances,
   the arithmetic is wrong, not the assertion.
+- **Never move a published tag.** If a release is broken, fix forward with a
+  new version. Someone may already have downloaded the old one.
+- **Commands with side effects run once.** `action.yml` deliberately does not
+  re-run `settle` to render nicer output; do not add a second invocation.
 
 ## Where to start reading
 
