@@ -47,3 +47,16 @@ jobs:
           git tag -a "$TAG" -m "$TAG"
           git push origin "$TAG"
           echo "Pushed $TAG" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Move the major tag the Action is consumed by
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Release tags are immutable. The major tag is the one deliberate
+          # exception: `uses: 4137314/dedalo@v0` has to follow the latest
+          # release, which is how every GitHub Action is consumed. It points
+          # at an immutable release tag, so nothing published ever changes.
+          major="v${VERSION%%.*}"
+          git tag -f -a "$major" -m "Latest v${VERSION%%.*}.x release ($VERSION)"
+          git push --force origin "$major"
+          echo "Moved $major to v$VERSION" >> "$GITHUB_STEP_SUMMARY"
