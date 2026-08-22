@@ -205,58 +205,6 @@ jobs:
           fi
           echo "static: no NEEDED entries in the dynamic section"
 
-      # Exercise the Dockerfile exactly as the release does, then prove the
-      # image works on a repository it did not build: non-root user, git
-      # safe.directory, entrypoint arguments.
-      - name: Build the container image
-        run: |
-          set -euo pipefail
-          mkdir -p image/amd64
-          cp target/x86_64-unknown-linux-musl/release/dedalo image/amd64/dedalo
-          docker build -t dedalo:ci .
-
-      - name: The image runs against a mounted repository
-        run: |
-          set -euo pipefail
-
-          docker run --rm dedalo:ci --version
-
-          # Read-only, as the image's own non-root user, against a checkout it
-          # does not own. This is what trips git's safe.directory guard if the
-          # image forgets to set it.
-          docker run --rm -v "$PWD:/repo:ro" dedalo:ci scan --limit 1
-          docker run --rm -v "$PWD:/repo:ro" dedalo:ci --json contributors > /dev/null
-
-          # The write path needs the caller's uid, since a host checkout is not
-          # owned by the image's user. If this breaks, `dedalo init` in a
-          # container is broken, which is most of the point of shipping one.
-          #
-          # Built from scratch rather than cloned from the workspace: a CI
-          # checkout is a detached HEAD with no local branches, so a clone of
-          # it has nothing for `dedalo` to read.
-          work="$(mktemp -d)/repo"
-          mkdir -p "$work"
-          git -C "$work" init -q -b main
-          git -C "$work" config user.email ci@example.com
-          git -C "$work" config user.name CI
-          echo seed > "$work/README.md"
-          git -C "$work" add -A
-          git -C "$work" commit -qm "Initial commit"
-          git -C "$work" checkout -q -b feature
-          printf 'a\nb\nc\n' > "$work/feature.txt"
-          git -C "$work" add -A
-          git -C "$work" commit -qm "Add a feature"
-          git -C "$work" checkout -q main
-          git -C "$work" merge -q --no-ff feature -m "Merge pull request: feature"
-
-          docker run --rm -u "$(id -u):$(id -g)" -v "$work:/repo" \
-            dedalo:ci init --name container-smoke --force
-          docker run --rm -u "$(id -u):$(id -g)" -v "$work:/repo" \
-            dedalo:ci plan --amount 1000 --save
-          test -f "$work/.dedalo/ledger.jsonl" \
-            || { echo "::error title=Image cannot write::plan --save left no ledger"; exit 1; }
-          echo "container writes to a mounted repository as the calling user"
-
       - name: install.sh fails safely on a version that does not exist
         run: |
           set -euo pipefail

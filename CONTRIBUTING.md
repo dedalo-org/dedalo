@@ -5,14 +5,8 @@ the thing the project is built to reward.
 
 ## Getting a development environment
 
-With Nix (recommended — you get the exact toolchain CI uses):
-
-```bash
-nix develop            # or `direnv allow` once, if you use direnv
-```
-
-Without Nix, install the toolchain pinned in `rust-toolchain.toml`; `rustup`
-picks it up automatically when you enter the repository.
+Install `rustup`. It reads `rust-toolchain.toml` when you enter the
+repository, so you get the same compiler CI uses without choosing one.
 
 ## The loop
 
@@ -22,10 +16,9 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all
 ```
 
-`nix flake check` runs eight gates the way CI does — build and tests, clippy,
-rustfmt, the declared MSRV, `actionlint` and `zizmor` over the workflows,
-`shellcheck` over the scripts, and the site's structure. If it passes locally,
-CI will pass.
+CI additionally builds the declared MSRV, rustdoc with `-D warnings`,
+coverage, the musl packaging path, and public-API compatibility. Running the
+three commands above catches almost everything before it gets there.
 
 ## Branches and commit messages
 
@@ -71,9 +64,12 @@ the body. [RELEASING.md](RELEASING.md) has the full policy.
 
 ## Where things live
 
-See [CLAUDE.md](CLAUDE.md) for the architecture, the invariants the codebase
-guarantees, and the conventions. It is written for AI assistants but it is the
-clearest map of the project for humans too.
+`crates/dedalo-core/src/lib.rs` documents the pipeline and exposes `Engine`,
+the shortest path through all four stages. From there: `money.rs` (the
+arithmetic), `payout.rs` (the artifact), `treasury.rs` (the fee split). The
+invariants the project guarantees are stated as property tests in
+`crates/dedalo-core/tests/properties.rs` — read those before changing anything
+that decides an amount.
 
 ## Getting paid
 

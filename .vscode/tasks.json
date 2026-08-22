@@ -30,12 +30,6 @@
       "command": "doc",
       "args": ["--workspace", "--no-deps", "--all-features", "--open"],
       "problemMatcher": ["$rustc"]
-    },
-    {
-      "label": "nix flake check",
-      "type": "shell",
-      "command": "nix flake check --print-build-logs",
-      "problemMatcher": []
     }
   ]
 }

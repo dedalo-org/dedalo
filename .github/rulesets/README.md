@@ -16,8 +16,8 @@ editing:
   review and review from a code owner where `CODEOWNERS` applies.
 - Review threads must be resolved before merging — a payout question left
   hanging is not a merge-blocker by accident, it is one on purpose.
-- Three checks must pass, on a branch that is up to date with `main`:
-  `CI`, `nix flake check / ubuntu-latest`, and `conventional commit format`.
+- Two checks must pass, on a branch that is up to date with `main`:
+  `CI` and `conventional commit format`.
 
 ## The one deliberate exception
 

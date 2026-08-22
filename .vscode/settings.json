@@ -24,13 +24,10 @@
   "files.insertFinalNewline": true,
 
   "files.watcherExclude": {
-    "**/target/**": true,
-    "**/.direnv/**": true,
-    "**/result": true
+    "**/target/**": true
   },
   "search.exclude": {
     "**/target": true,
-    "**/.direnv": true,
     "Cargo.lock": true
   },
 

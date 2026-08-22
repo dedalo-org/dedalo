@@ -29,7 +29,6 @@
         "do_not_enforce_on_create": false,
         "required_status_checks": [
           { "context": "CI" },
-          { "context": "nix flake check / ubuntu-latest" },
           { "context": "conventional commit format" }
         ]
       }

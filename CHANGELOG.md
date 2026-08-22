@@ -21,8 +21,8 @@ Both crates in the workspace share one version and one tag.
   to settle the same plan twice.
 - **cli**: `dedalo init`, `scan`, `contributors`, `plan`, `settle`, `status`,
   `identity` and `ledger`, each with `--json`.
-- **infrastructure**: a Nix flake pinning one toolchain for shells, builds and
-  CI, with the declared MSRV verified rather than asserted.
+- **infrastructure**: one toolchain pinned in `rust-toolchain.toml` for
+  contributors and CI, with the declared MSRV verified rather than asserted.
 
 ### Known limitations
 

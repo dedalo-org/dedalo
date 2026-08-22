@@ -73,7 +73,6 @@ refactor(git): move trailer parsing behind the backend trait
    - attaches signed build provenance to every archive;
    - publishes a GitHub release with the changelog section as its notes;
    - publishes `dedalo-core` then `dedalo` to crates.io;
-   - pushes `ghcr.io/4137314/dedalo:<version>` and `:latest`.
 
 If step 4 fails after the tag exists, fix forward: delete the tag, merge the
 fix, and re-run **Tag**. Never move a tag that a release already published.
@@ -112,5 +111,5 @@ gh attestation verify dedalo-v0.1.0-x86_64-unknown-linux-gnu.tar.gz --repo 41373
 Or rebuild it from source with the pinned toolchain:
 
 ```bash
-nix build github:4137314/dedalo/v0.1.0
+cargo install dedalo --locked --version 0.1.0
 ```

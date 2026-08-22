@@ -54,10 +54,10 @@ whose id changed is a plan someone tampered with.
 
 ### How this is verified
 
-Not claims — gates. `nix flake check` runs all eight locally, exactly as CI
-runs them: workspace build and tests, clippy, rustfmt, the declared MSRV,
-`actionlint` and `zizmor` over every workflow, `shellcheck` over the scripts,
-and the site's structure and metadata.
+Not claims — gates. CI runs them on every pull request: workspace build and
+tests on Linux, macOS and Windows, clippy with `-D warnings`, rustfmt, the
+declared MSRV built with exactly the compiler `rust-version` promises, rustdoc,
+coverage, packaging, and public-API compatibility.
 
 The test suite is 66 tests in four layers:
 
@@ -90,9 +90,6 @@ curl -fsSL https://raw.githubusercontent.com/4137314/dedalo/main/install.sh | sh
 
 cargo install dedalo --locked      # from source
 cargo binstall dedalo              # prebuilt, no compile
-nix run github:4137314/dedalo -- status
-
-docker run --rm -v "$PWD:/repo" ghcr.io/4137314/dedalo plan --amount 1000
 ```
 
 Windows builds are published as `.zip` on the
@@ -251,18 +248,8 @@ Roadmap, roughly in order:
 
 ## Development
 
-The whole toolchain is pinned and reproducible. With [Nix](https://nixos.org):
-
-```bash
-nix develop            # pinned rust + cargo-nextest, cargo-deny, cargo-audit, taplo
-nix flake check        # build + tests, clippy, rustfmt, and the declared MSRV
-nix build .#docs       # the API reference the docs workflow publishes
-nix run .# -- status   # run the CLI without installing it
-```
-
-`direnv allow` loads the same shell automatically on `cd`.
-
-Without Nix, `rustup` picks up `rust-toolchain.toml` on its own:
+`rustup` picks up the compiler pinned in `rust-toolchain.toml` as soon as you
+enter the repository, so the toolchain is the same one CI uses:
 
 ```bash
 cargo test --workspace --all-features
@@ -286,20 +273,19 @@ repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 40);
 
 | Concern | How |
 | --- | --- |
-| Reproducible builds | `flake.nix` + `rust-toolchain.toml`, one pinned compiler everywhere |
+| Pinned toolchain | `rust-toolchain.toml`, picked up by `rustup` on entry |
 | CI | `.github/workflows/ci.yml` — fmt, clippy, tests on Linux/macOS/Windows, MSRV, rustdoc, coverage, packaging, public-API compatibility |
-| Reproducibility check | `.github/workflows/nix.yml` — `nix flake check` on Linux and macOS |
-| MSRV | verified, not asserted: `flake.nix` builds the workspace with exactly the compiler `rust-version` promises |
-| Workflow safety | `actionlint` and `zizmor` run as flake checks; every third-party action pinned to a commit |
+| MSRV | verified, not asserted: CI builds the workspace with exactly the compiler `rust-version` promises |
+| Workflow safety | every third-party action pinned to a commit, with the tag as a trailing comment |
 | Artifact integrity | SHA-256 checksums plus signed build provenance (`gh attestation verify`) |
 | API docs | `.github/workflows/docs.yml` — rustdoc published to GitHub Pages on every push to `main` |
 | Releases | `.github/workflows/release.yml` — tagged builds for five targets, checksums, GitHub release, crates.io |
 | Supply chain | `.github/workflows/security.yml` — `cargo-deny` and `cargo-audit`, weekly and on manifest changes |
 | Dependencies | Dependabot, grouped weekly PRs for Cargo and Actions |
-| Editors | `.vscode/` for VS Code, `CLAUDE.md` and `.claude/` for AI assistants |
+| Editors | `.vscode/` for VS Code |
 | Versioning | one version and one tag for the whole workspace, bumped by a reviewable release pull request — see [RELEASING.md](RELEASING.md) |
 | Changelog | generated from Conventional Commit subjects with `git-cliff`; the release notes and `CHANGELOG.md` are the same text |
-| Distribution | install script, `cargo install`, `cargo binstall`, Nix flake, `ghcr.io` image, GitHub Action |
+| Distribution | install script, `cargo install`, `cargo binstall`, GitHub Action |
 | Branch policy | `.github/rulesets/main.json`, importable in Settings → Rules |
 | Site | `site/` published to GitHub Pages with the API reference under `/api/` |
 
@@ -313,8 +299,10 @@ Dedalo is open source and built by the community. If you care about Rust,
 developer tooling, and sustainable open-source economics, contributions are
 welcome — and, fittingly, they are what the project pays out for.
 
-Start with [CONTRIBUTING.md](CONTRIBUTING.md); [CLAUDE.md](CLAUDE.md) is the
-clearest map of the architecture and the invariants the code guarantees.
+Start with [CONTRIBUTING.md](CONTRIBUTING.md); `crates/dedalo-core/src/lib.rs`
+documents the pipeline end to end and is the clearest map of the architecture.
+The invariants the code guarantees are stated and enforced in
+`crates/dedalo-core/tests/properties.rs`.
 Security issues go through [SECURITY.md](SECURITY.md), never a public issue.
 
 ## License
