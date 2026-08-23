@@ -200,10 +200,10 @@ fn parse_co_authors(body: &str) -> Vec<Author> {
         };
         // Kept as nested `if`s rather than a let-chain so the crate still
         // builds on its declared minimum supported Rust version.
-        if let Some(author) = parse_author_line(rest.trim()) {
-            if !out.contains(&author) {
-                out.push(author);
-            }
+        if let Some(author) = parse_author_line(rest.trim())
+            && !out.contains(&author)
+        {
+            out.push(author);
         }
     }
     out

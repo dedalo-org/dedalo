@@ -3,7 +3,7 @@ name = "dedalo"
 description = "Merge-to-earn funding for open source: turn git merges into deterministic contributor payouts."
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85.0"
+rust-version = "1.90.0"
 license = "MIT"
 repository = "https://github.com/dedalo-org/dedalo"
 homepage = "https://dedalo-org.github.io/"
@@ -28,8 +28,7 @@ exclude = [
   "/deny.toml",
   "/taplo.toml",
   # The contract source ships; its build output does not.
-  "/contracts/out",
-  "/contracts/cache",
+  "/src/chain/contract/target",
 ]
 
 [features]
@@ -51,6 +50,11 @@ required-features = ["cli"]
 
 [dependencies]
 # The library.
+# The ABI encoder the rest of the Rust-Ethereum ecosystem uses. Preferred over
+# encoding by hand because the two alignment rules the ABI has are exactly the
+# detail a hand-rolled encoder gets right until somebody edits it. Pinned to
+# what the vault contract carries, so one version of the types exists.
+alloy-sol-types = { version = "1.5.7", default-features = false }
 async-trait = "0.1"
 hex = "0.4"
 serde = { version = "1", features = ["derive"] }

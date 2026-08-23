@@ -45,10 +45,10 @@
 
 use sha3::{Digest, Keccak256};
 
+use crate::chain::wallet::Address;
 use crate::error::{Error, Result};
 use crate::money::Amount;
 use crate::payout::PayoutPlan;
-use crate::wallet::Address;
 
 /// A 32-byte hash, as the chain sees it.
 pub type Hash = [u8; 32];
@@ -66,42 +66,37 @@ pub struct Claim {
 }
 
 impl Claim {
-    /// `abi.encode(uint256, address, uint256)`: three 32-byte words.
-    ///
-    /// Addresses are right-aligned in their word, which is how the ABI encodes
-    /// every type narrower than a word.
-    fn abi_encoded(&self) -> Result<[u8; 96]> {
-        let mut out = [0u8; 96];
-        out[24..32].copy_from_slice(&self.index.to_be_bytes());
-        out[44..64].copy_from_slice(&evm_address_bytes(&self.account)?);
-        let amount = self.amount.base_units();
-        out[80..96].copy_from_slice(&amount.to_be_bytes());
-        Ok(out)
-    }
-
     /// The double-hashed leaf this claim contributes to the tree.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Address`] if the account is not an EVM address.
     pub fn leaf(&self) -> Result<Hash> {
-        let once = keccak(&self.abi_encoded()?);
-        Ok(keccak(&once))
+        Ok(leaf_of(self.index, self.account.evm_bytes()?, self.amount))
     }
 }
 
-/// The 20 raw bytes of an EVM address.
+/// The leaf encoding itself, over the bytes a chain actually holds.
 ///
-/// # Errors
+/// Separate from [`Claim`] because this is the primitive both halves need and
+/// they hold an address differently. Off chain an address is a checksummed
+/// string, because that is what a plan records and a person reads; on chain it
+/// is twenty bytes, and a contract that carried the string form would spend
+/// gas and code size turning one into the other on every call.
 ///
-/// Returns [`Error::Address`] if the address is not an EVM one. A non-EVM
-/// address in a plan destined for an EVM claim contract is a configuration
-/// mistake, and silently truncating it would send funds nowhere.
-fn evm_address_bytes(address: &Address) -> Result<[u8; 20]> {
-    let hex_body = address
-        .as_str()
-        .strip_prefix("0x")
-        .ok_or_else(|| Error::address(address.as_str(), "not an EVM address"))?;
-    let raw = hex::decode(hex_body)
-        .map_err(|e| Error::address(address.as_str(), format!("not hex: {e}")))?;
-    raw.try_into()
-        .map_err(|_| Error::address(address.as_str(), "an EVM address is 20 bytes"))
+/// ```text
+/// leaf = keccak256( keccak256( abi.encode(uint256 index, address account, uint256 amount) ) )
+/// ```
+pub fn leaf_of(index: u64, account: [u8; 20], amount: Amount) -> Hash {
+    // Three 32-byte words. Numbers and addresses are right-aligned, which is
+    // how the ABI encodes every type narrower than a word.
+    let mut encoded = [0u8; 96];
+    encoded[24..32].copy_from_slice(&index.to_be_bytes());
+    encoded[44..64].copy_from_slice(&account);
+    encoded[80..96].copy_from_slice(&amount.base_units().to_be_bytes());
+
+    let once = keccak(&encoded);
+    keccak(&once)
 }
 
 fn keccak(bytes: &[u8]) -> Hash {
@@ -226,7 +221,7 @@ impl ClaimTree {
                 break;
             }
             // An odd node was promoted, so at this level it has no sibling.
-            let sibling = if position % 2 == 0 {
+            let sibling = if position.is_multiple_of(2) {
                 position + 1
             } else {
                 position - 1
@@ -277,19 +272,20 @@ mod tests {
             account: address(0xaa),
             amount: Amount::from_base_units(255),
         };
-        let encoded = claim.abi_encoded().unwrap();
-        assert_eq!(encoded.len(), 96);
-        // index 1, right-aligned in the first word.
-        assert_eq!(encoded[31], 1);
-        assert!(encoded[..31].iter().all(|b| *b == 0));
-        // address, right-aligned in the second: 12 zero bytes then 20 of 0xaa.
-        assert!(encoded[32..44].iter().all(|b| *b == 0));
-        assert!(encoded[44..64].iter().all(|b| *b == 0xaa));
-        // amount 255, right-aligned in the third.
-        assert_eq!(encoded[95], 255);
+        // Three words, rebuilt here rather than read back from the encoder, so
+        // the test asserts the layout instead of agreeing with it.
+        let mut expected_encoding = [0u8; 96];
+        expected_encoding[31] = 1; // index, right-aligned
+        expected_encoding[44..64].copy_from_slice(&[0xaa; 20]); // address, right-aligned
+        expected_encoding[95] = 255; // amount, right-aligned
 
-        let expected = keccak(&keccak(&encoded));
+        let expected = keccak(&keccak(&expected_encoding));
         assert_eq!(claim.leaf().unwrap(), expected);
+        assert_eq!(
+            leaf_of(1, [0xaa; 20], Amount::from_base_units(255)),
+            expected,
+            "the primitive and the wrapper must agree"
+        );
     }
 
     #[test]
@@ -388,6 +384,93 @@ mod tests {
     fn an_empty_tree_is_refused() {
         let error = ClaimTree::new(Vec::new()).unwrap_err().to_string();
         assert!(error.contains("at least one payable item"), "{error}");
+    }
+
+    /// **Domain: every tree size from one to sixty-four claims.**
+    ///
+    /// Proves, for that domain: every claim verifies against its own root, and
+    /// no claim verifies against another claim's proof. Sixty-four covers
+    /// every shape the promotion rule produces — six full levels, and every
+    /// odd count that leaves a node without a sibling.
+    ///
+    /// Slow by construction, so `#[ignore]`; `ws-check` and the `verification`
+    /// CI job run it with `--ignored`.
+    #[test]
+    #[ignore = "exhaustive: ~20s"]
+    fn every_tree_size_up_to_sixty_four_proves_exactly_its_own_claims() {
+        for size in 1..=64u64 {
+            let claims: Vec<Claim> = (0..size)
+                .map(|index| Claim {
+                    index,
+                    account: Address::from_evm_bytes([index as u8 + 1; 20]),
+                    amount: Amount::from_base_units(u128::from(index) + 1),
+                })
+                .collect();
+            let tree = ClaimTree::new(claims).unwrap();
+            let root = tree.root();
+
+            for (index, claim) in tree.claims().iter().enumerate() {
+                let proof = tree.proof(index).unwrap();
+                assert!(
+                    ClaimTree::verify(root, claim.leaf().unwrap(), &proof),
+                    "size {size}: claim {index} did not verify against its own root"
+                );
+                for (other, other_claim) in tree.claims().iter().enumerate() {
+                    if other == index {
+                        continue;
+                    }
+                    assert!(
+                        !ClaimTree::verify(root, other_claim.leaf().unwrap(), &proof),
+                        "size {size}: claim {other} verified with claim {index}'s proof"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The leaf encoding, pinned.
+    ///
+    /// These values were the cross-check against a second implementation of
+    /// the same encoding, in Solidity. That implementation is gone — the vault
+    /// is Rust now — but the reason to pin them outlived it: the encoding is
+    /// what a deployed contract will verify proofs against, and changing it
+    /// silently would invalidate every round already deposited.
+    ///
+    /// A change here is allowed. It has to be deliberate, and the commit has
+    /// to say why.
+    #[test]
+    fn the_leaf_encoding_has_not_moved() {
+        let claims: Vec<Claim> = [
+            ("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", 1_000u128),
+            ("0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359", 2_500),
+            ("0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB", 400),
+            ("0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb", 100),
+            ("0x9d33df7B2951b0086D40814475869BE3A485a146", 7),
+        ]
+        .iter()
+        .enumerate()
+        .map(|(index, (account, amount))| Claim {
+            index: index as u64,
+            account: Address::parse(account).unwrap(),
+            amount: Amount::from_base_units(*amount),
+        })
+        .collect();
+
+        let tree = ClaimTree::new(claims).unwrap();
+        assert_eq!(
+            tree.root_hex(),
+            "0xffcf57755a292ee72605206f2e2fe131b222cb0ebd45c0844f68a187a384ec72"
+        );
+        assert_eq!(tree.total().unwrap(), Amount::from_base_units(4_007));
+
+        // Five claims, so the last one sits on a promoted node and its proof is
+        // one sibling rather than three.
+        let short = tree.proof(4).unwrap();
+        assert_eq!(short.len(), 1);
+        assert_eq!(
+            format!("0x{}", hex::encode(short[0])),
+            "0x3c10e56238056db4830e9497627d8c89435b42a0bc7142797badd5ec307a4af2"
+        );
     }
 
     #[test]

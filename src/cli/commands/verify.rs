@@ -7,7 +7,7 @@
 use anyhow::{Context, Result};
 
 use crate::Engine;
-use crate::ledger::LedgerEntry;
+use crate::storage::ledger::LedgerEntry;
 
 use crate::cli::ui;
 

@@ -48,13 +48,11 @@ struct Entry {
 #[derive(Debug, Deserialize)]
 struct ContractEntry {
     method: String,
-    #[serde(default)]
-    engine: Option<String>,
-    #[serde(default)]
-    conditions_proved: Option<usize>,
+    target: String,
+    max_compressed_kib: usize,
 }
 
-const METHODS: [&str; 5] = ["exhaustive", "smt", "property", "tests", "exempt"];
+const METHODS: [&str; 5] = ["exhaustive", "property", "tests", "proofs", "exempt"];
 
 /// Anything that adds, subtracts, multiplies or converts money.
 ///
@@ -116,6 +114,12 @@ fn modules_on_disk() -> BTreeMap<String, PathBuf> {
             if name == "lib" || name == "main" {
                 return None;
             }
+            // `src/chain/contract` is a separate crate with its own manifest:
+            // it compiles for another target and is not part of this module
+            // tree. It is accounted for under [contracts] instead.
+            if name.starts_with("chain/contract/") {
+                return None;
+            }
             Some((name, path))
         })
         .collect()
@@ -163,11 +167,30 @@ fn builds_addresses(path: &Path) -> bool {
     })
 }
 
-/// Harness names as `<test file stem>::<function>`.
+/// Every test function, named the way the manifest names it.
+///
+/// Two shapes, because there are two kinds of test and the manifest should say
+/// which it means:
+///
+/// - `<file stem>::<fn>` for an integration test under `tests/`, which links
+///   the crate from outside like any other consumer;
+/// - `<module path>::<fn>` for a unit test under `src/`, which sees the
+///   module's private surface.
 fn harnesses_on_disk() -> BTreeSet<String> {
-    let tests = root().join("tests");
+    fn functions_in(source: &str, prefix: &str, found: &mut BTreeSet<String>) {
+        for line in source.replace("\r\n", "\n").lines() {
+            let trimmed = line.trim_start();
+            if let Some(rest) = trimmed.strip_prefix("fn ")
+                && let Some(name) = rest.split(['(', '<']).next()
+            {
+                found.insert(format!("{prefix}::{name}"));
+            }
+        }
+    }
+
     let mut found = BTreeSet::new();
-    for entry in std::fs::read_dir(&tests).expect("tests/ is readable") {
+
+    for entry in std::fs::read_dir(root().join("tests")).expect("tests/ is readable") {
         let path = entry.expect("a readable entry").path();
         if path.extension().is_none_or(|e| e != "rs") {
             continue;
@@ -177,20 +200,15 @@ fn harnesses_on_disk() -> BTreeSet<String> {
             .expect("a file stem")
             .to_string_lossy()
             .to_string();
-        let source = std::fs::read_to_string(&path)
-            .expect("a readable test file")
-            .replace("\r\n", "\n");
-        for line in source.lines() {
-            let trimmed = line.trim_start();
-            // Nested rather than a `let` chain: those are stable from 1.88
-            // and this crate's MSRV is 1.85, which CI builds with exactly.
-            if let Some(rest) = trimmed.strip_prefix("fn ") {
-                if let Some(name) = rest.split(['(', '<']).next() {
-                    found.insert(format!("{stem}::{name}"));
-                }
-            }
-        }
+        let source = std::fs::read_to_string(&path).expect("a readable test file");
+        functions_in(&source, &stem, &mut found);
     }
+
+    for (module, path) in modules_on_disk() {
+        let source = std::fs::read_to_string(&path).expect("a readable module");
+        functions_in(&source, &module.replace('/', "::"), &mut found);
+    }
+
     found
 }
 
@@ -230,7 +248,7 @@ fn every_declared_method_is_one_this_project_means_something_by() {
                 entry.reason.is_some(),
                 "{name}: an exemption without a reason is a gap nobody can review"
             );
-        } else if entry.method != "tests" {
+        } else if entry.method != "tests" && entry.method != "proofs" {
             assert!(
                 !entry.harnesses.is_empty(),
                 "{name}: `{}` must name the harnesses that carry it",
@@ -240,18 +258,25 @@ fn every_declared_method_is_one_this_project_means_something_by() {
     }
 
     for (path, entry) in &manifest.contracts {
+        // A deployable is a binding around rules verified elsewhere, so what
+        // is checked here is that it exists, names its target, and declares
+        // the size limit `ws-check` measures it against. A contract that
+        // cannot be deployed is not a contract.
         assert_eq!(
-            entry.method, "smt",
-            "{path}: contracts are verified by solver"
-        );
-        assert!(entry.engine.is_some(), "{path}: name the engine");
-        assert!(
-            entry.conditions_proved.is_some_and(|n| n > 0),
-            "{path}: record how many conditions were discharged"
+            entry.method, "binding",
+            "{path}: a deployable binds rules, it does not hold them"
         );
         assert!(
-            root().join("contracts").join(path).is_file(),
-            "{path}: declared but not present"
+            !entry.target.is_empty(),
+            "{path}: name the target it compiles for"
+        );
+        assert!(
+            entry.max_compressed_kib > 0,
+            "{path}: declare the size limit"
+        );
+        assert!(
+            root().join(path).join("Cargo.toml").is_file(),
+            "{path}: declared but has no manifest"
         );
     }
 }

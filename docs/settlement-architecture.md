@@ -8,7 +8,7 @@ rewriting the part of the system that touches money.
 
 | Decision | State |
 | --- | --- |
-| Pull, not push | Built. `dedalo::merkle` produces the root; `contracts/src/DedaloClaim.sol` verifies proofs against it, with twelve tests including the Rust vectors. Unaudited, undeployed. |
+| Pull, not push | Built, in Rust. `chain::merkle` produces the root and `chain::vault` holds the rules a deployed contract enforces; `src/chain/contract` binds them to Arbitrum Stylus. Unaudited, undeployed. |
 | The key is not in CI | Built, by removal. `settlement.signer_env` is gone, the `evm` backend broadcasts nothing, and `dedalo propose` prints transactions for people to sign. |
 | Chain-agnostic addresses | Built. `wallet::AddressKind`, one variant. |
 
@@ -122,12 +122,20 @@ says: `Error::NotImplemented`.
 
 ## What exists now, and what it is worth
 
-`ClaimTree` and `DedaloClaim` are two implementations of one leaf encoding, and
-the contract's test suite is pinned to a root and five proofs that the Rust
-side produced. They agree. That is worth something — it is the class of bug
-that silently pays nobody — and it is not an audit. Nobody outside this
-repository has looked at the contract, it has never held a coin, and the
-reentrancy, ERC-20 and expiry paths have been reasoned about by their author
-and tested by their author.
+The vault is one implementation, in Rust, split so that the part which decides
+anything is pure: `chain::vault` takes the state it needs and returns the state
+it produces, reads no clock and no caller, and is therefore driven over its
+whole domain by tests rather than by deploying it somewhere and poking it. The
+deployable binds it to Arbitrum Stylus and does nothing else.
+
+That is worth something. It is not an audit. Nobody outside this repository has
+looked at it, it has never held a coin, and the reentrancy, ERC-20 and expiry
+paths have been reasoned about by their author and tested by their author.
+
+**What was given up** should be said plainly: the previous vault was Solidity,
+and solc's model checker discharged all ten of its arithmetic conditions with
+a solver — a stronger statement than any test. Rust has no equivalent that
+terminates on this codebase. The rules are now in one language, tested with the
+same machinery as the rest of the money path, and proved by nothing.
 
 Treat it as a specification that happens to compile.

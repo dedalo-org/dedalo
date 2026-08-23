@@ -13,7 +13,7 @@
 //!   drain the source wallet, and everything with write access to a workflow
 //!   can reach it. Dedalo therefore holds no key and produces no signature.
 //!
-//! What replaces it is [`crate::settlement::proposal`]: `dedalo propose`
+//! What replaces it is [`crate::chain::settlement::proposal`]: `dedalo propose`
 //! emits the exact transactions a multisig must run, calldata included, and
 //! people sign them.
 //!

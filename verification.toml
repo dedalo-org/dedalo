@@ -3,19 +3,19 @@
 # `tests/verification_manifest.rs` fails the build unless this file accounts
 # for every module under `src/`, so a new one cannot be added without someone
 # deciding what verifies it. It also counts the money arithmetic in each module
-# and compares it to `arithmetic_sites` below: if the count moves, the build
-# fails and the change has to be looked at rather than absorbed.
+# and compares it to `arithmetic_sites`: if the count moves, the build fails
+# and the change has to be looked at rather than absorbed.
 #
-# The methods, strongest first. The distinction between them is not decoration:
+# The methods, strongest first. The distinction is not decoration:
 #
 #   exhaustive  Every value in a complete finite domain is tried. Passing is a
 #               proof that no counterexample exists in that domain.
-#   smt         A solver discharged the conditions. `solc --model-checker-engine
-#               bmc` over the contracts, from an arbitrary starting state.
 #   property    Generated inputs. Thousands of samples, not a proof — a rare
 #               counterexample can survive it, and one did: see the EIP-55
 #               collisions pinned in tests/adversarial.rs.
 #   tests       Hand-picked cases only.
+#   proofs      The module is not verified; it *is* verification. A `proofs.rs`
+#               compiles only under `cfg(test)` and ships in no release.
 #   exempt      Nothing here decides how much money moves or where it goes.
 #               Must have zero arithmetic sites, and must not build an Address.
 #
@@ -24,7 +24,7 @@
 
 [meta]
 # Bumped when the meaning of a method changes, so a stale manifest is visible.
-schema = 1
+schema = 2
 
 # ---------------------------------------------------------------- proved ---
 
@@ -32,32 +32,35 @@ schema = 1
 method = "exhaustive"
 arithmetic_sites = 10
 harnesses = [
-  "exhaustive::every_basis_point_value_rounds_down_and_never_exceeds_the_input",
-  "exhaustive::every_small_weight_vector_conserves_the_total",
+  "money::proofs::every_basis_point_value_rounds_down_and_never_exceeds_the_input",
+  "money::proofs::every_small_weight_vector_conserves_the_total",
 ]
 notes = """
 Exhaustive over all 65,536 basis-point values and over every weight vector of \
 up to four entries with weights 0..=6. Longer vectors and larger weights are \
-sampled by properties.rs, not proved."""
+sampled by the property tests in the same file, not proved."""
 
-[modules.treasury]
+[modules."money/treasury"]
 method = "exhaustive"
 arithmetic_sites = 5
-harnesses = ["exhaustive::every_valid_fee_schedule_conserves_the_round"]
+harnesses = ["money::proofs::every_valid_fee_schedule_conserves_the_round"]
 notes = """
 Exhaustive over all 50,005,000 fee schedules `validate` accepts. The gross \
 amount is not enumerable, so it is pinned to the values where integer \
 arithmetic breaks."""
 
-[modules.merkle]
+[modules."chain/merkle"]
 method = "exhaustive"
 arithmetic_sites = 2
-harnesses = ["exhaustive::every_tree_size_up_to_sixty_four_proves_exactly_its_own_claims"]
+harnesses = [
+  "chain::merkle::every_tree_size_up_to_sixty_four_proves_exactly_its_own_claims",
+  "chain::merkle::the_leaf_encoding_has_not_moved",
+]
 notes = """
 Exhaustive over every tree size from one to sixty-four, which covers every \
-shape the odd-node promotion rule produces. The same encoding is verified \
-independently on chain: contracts/test/DedaloClaim.t.sol is pinned to a root \
-and proofs this module produced."""
+shape the odd-node promotion rule produces. The leaf encoding is pinned \
+separately: it is what a deployed vault verifies proofs against, so changing \
+it silently would invalidate every round already deposited."""
 
 # ------------------------------------------------------------- sampled ---
 
@@ -65,10 +68,10 @@ and proofs this module produced."""
 method = "property"
 arithmetic_sites = 13
 harnesses = [
-  "properties::plans_always_balance_and_verify",
-  "properties::plan_ids_ignore_the_clock",
-  "properties::tampering_with_a_plan_breaks_its_id",
-  "properties::one_wallet_is_paid_once",
+  "payout::proofs::plans_always_balance_and_verify",
+  "payout::proofs::plan_ids_ignore_the_clock",
+  "payout::proofs::tampering_with_a_plan_breaks_its_id",
+  "payout::proofs::one_wallet_is_paid_once",
   "adversarial::every_base_unit_is_assigned_or_declared",
   "adversarial::a_round_with_no_payees_declares_the_whole_pool",
 ]
@@ -83,8 +86,12 @@ harnesses = [
   "adversarial::attribution_survives_hostile_commit_metadata",
   "adversarial::extreme_policies_saturate_rather_than_wrap",
 ]
+notes = """
+Scores in milli-points rather than `Amount`, which is why the arithmetic \
+detector counts `saturating_*` as well: counting only `Amount` would let the \
+module that decides who is owed what look arithmetic-free."""
 
-[modules.wallet]
+[modules."chain/wallet"]
 method = "property"
 arithmetic_sites = 0
 harnesses = [
@@ -96,47 +103,64 @@ No arithmetic, but it decides *where* money lands, so it may not be exempt. \
 The property compares against an independent EIP-55 implementation in both \
 directions."""
 
-[modules.ledger]
+[modules."storage/ledger"]
 method = "property"
-arithmetic_sites = 5
-harnesses = ["properties::lifetime_paid_is_the_sum_of_the_settlements_that_were_not_simulated"]
+arithmetic_sites = 7
+harnesses = ["storage::ledger::lifetime_paid_is_the_sum_of_the_settlements_that_were_not_simulated"]
 notes = """
 The only place outside `payout` that accumulates rather than carries: \
 `state()` replays the chain into lifetime totals."""
 
 # --------------------------------------------------------------- tested ---
 
+[modules."chain/vault"]
+method = "tests"
+arithmetic_sites = 4
+notes = """
+The rules a deployed vault enforces, and the one part of this system that \
+cannot be patched after it ships. Thirteen tests, one per way it must refuse: \
+the replay guard, double claims, inflated amounts, redirected recipients, \
+borrowed proofs, a round whose accounting is broken, expiry, sweep \
+authorisation, and a token that under-delivers. `Refusal` is the \
+specification, and a test asserts no two refusals share a sentence."""
+
+[modules."chain/vault/round"]
+method = "tests"
+arithmetic_sites = 1
+notes = "The round record. Its invariant is exercised through chain/vault."
+
 [modules.config]
 method = "tests"
 arithmetic_sites = 0
-notes = "Builds Addresses from a file, so not exempt. Covered by unit tests and tests/cli.rs."
+notes = "Builds Addresses from a file, so not exempt. Unit tests and tests/cli.rs."
 
-[modules.identity]
+[modules."attribution/identity"]
 method = "tests"
 arithmetic_sites = 0
-notes = "Maps git emails to Addresses. Covered by unit tests."
+notes = "Maps git emails to Addresses."
 
-[modules.store]
+[modules."storage/objects"]
 method = "tests"
 arithmetic_sites = 0
 notes = """
 No arithmetic, but an id here becomes a filesystem path. The unit tests \
 enumerate the hostile shapes rather than sample them."""
 
-[modules."settlement/abi"]
+[modules."chain/settlement/abi"]
 method = "tests"
-arithmetic_sites = 2
+arithmetic_sites = 1
 notes = """
-Carries amounts into calldata; it does not decide them. Selectors are checked \
-against the canonical published values, and the encoding is checked again on \
-chain by the contract suite."""
+Carries amounts into calldata; it does not decide them. The encoder is \
+`alloy-sol-types` rather than hand-written, and the selectors are still \
+checked against the canonical published values so swapping the library out \
+cannot silently change what a signer is asked to sign."""
 
-[modules."settlement/proposal"]
+[modules."chain/settlement/proposal"]
 method = "tests"
 arithmetic_sites = 2
 notes = "Reads the tree's total and encodes it. Decides nothing."
 
-[modules."settlement/dry_run"]
+[modules."chain/settlement/dry_run"]
 method = "tests"
 arithmetic_sites = 0
 notes = "Sums a plan it was given, for a receipt."
@@ -146,12 +170,24 @@ method = "tests"
 arithmetic_sites = 3
 notes = """
 Sums item amounts to print a total. Display only — the plan it prints was \
-decided by `payout`. Covered by tests/cli.rs, which pins the --json shape."""
+decided by `payout`. tests/cli.rs pins the --json shape."""
 
 [modules."cli/commands/identity"]
 method = "tests"
 arithmetic_sites = 0
 notes = "Parses the address a user types, and warns on a weak checksum."
+
+# --------------------------------------------------------------- proofs ---
+
+[modules."money/proofs"]
+method = "proofs"
+arithmetic_sites = 34
+notes = "The exhaustive and property suites for money and treasury."
+
+[modules."payout/proofs"]
+method = "proofs"
+arithmetic_sites = 5
+notes = "The property suite for the plan."
 
 # --------------------------------------------------------------- exempt ---
 
@@ -170,20 +206,30 @@ method = "exempt"
 arithmetic_sites = 0
 reason = "Drives the git binary and parses its output."
 
-[modules.testing]
+[modules.chain]
 method = "exempt"
 arithmetic_sites = 0
-reason = "Builds throwaway repositories for tests. Never compiled into a release."
+reason = "The chain-facing modules' index."
 
-[modules.settlement]
+[modules."chain/settlement"]
 method = "exempt"
 arithmetic_sites = 0
 reason = "The backend trait and its selector."
 
-[modules."settlement/evm"]
+[modules."chain/settlement/evm"]
 method = "exempt"
 arithmetic_sites = 0
 reason = "Validates chain settings and refuses to broadcast. Moves nothing."
+
+[modules.storage]
+method = "exempt"
+arithmetic_sites = 0
+reason = "The storage modules' index."
+
+[modules.testing]
+method = "exempt"
+arithmetic_sites = 0
+reason = "Builds throwaway repositories for tests. Never in a release build."
 
 [modules.cli]
 method = "exempt"
@@ -220,7 +266,7 @@ arithmetic_is_not_money = "`entries.len().saturating_sub(limit)` — how many en
 [modules."cli/commands/propose"]
 method = "exempt"
 arithmetic_sites = 0
-reason = "Prints what settlement/proposal built."
+reason = "Prints what chain/settlement/proposal built."
 
 [modules."cli/commands/scan"]
 method = "exempt"
@@ -243,15 +289,18 @@ method = "exempt"
 arithmetic_sites = 0
 reason = "Walks the chain and reports. Reads only."
 
-# ------------------------------------------------------------- contracts ---
+# ----------------------------------------------------------- deployable ---
 
-[contracts."src/DedaloClaim.sol"]
-method = "smt"
-engine = "bmc"
-conditions_proved = 10
+[contracts."src/chain/contract"]
+method = "binding"
+target = "wasm32-unknown-unknown"
+# Stylus rejects anything larger, compressed. Measured by `ws-check`, because a
+# contract that cannot be deployed is not a contract.
+max_compressed_kib = 24
 notes = """
-`solc --model-checker-engine bmc` discharges every arithmetic and assertion \
-condition from an arbitrary starting state. The CHC engine, which reasons \
-across transactions, does not terminate on this contract within ten minutes; \
-that is recorded rather than hidden. scripts/verify-contracts.py is the gate; it does not ship in the crate archive, \
-since `scripts/` is excluded — run it from a clone."""
+An Arbitrum Stylus contract, and deliberately thin: every rule it enforces is \
+`chain::vault`, which is ordinary Rust and tested here. What is in the crate \
+is the part that cannot be pure — reading storage, moving a token, knowing the \
+time — and a reader checking whether it is correct should end up in `vault`.
+
+Unaudited and undeployed. Nothing here has held a coin."""

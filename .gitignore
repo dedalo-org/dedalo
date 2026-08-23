@@ -6,8 +6,8 @@
 # the payout ledger are part of the project's public record.
 
 # forge build output
-/contracts/out
-/contracts/cache
+/src/chain/contract/target
+
 
 # Build outputs of the release and docs pipelines
 /dist

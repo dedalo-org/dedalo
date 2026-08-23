@@ -5,11 +5,11 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::attribution::AttributionPolicy;
+use crate::attribution::identity::{Identity, IdentityMap};
+use crate::chain::wallet::{Address, AddressKind};
 use crate::error::{Error, Result};
-use crate::identity::{Identity, IdentityMap};
 use crate::money::Asset;
-use crate::treasury::FeeSchedule;
-use crate::wallet::{Address, AddressKind};
+use crate::money::treasury::FeeSchedule;
 
 /// Name of the config file, looked up from the working directory upwards.
 pub const CONFIG_FILE: &str = "dedalo.toml";
@@ -139,11 +139,11 @@ impl Config {
             },
             fees: FeeSchedule::default(),
             wallets: Wallets {
-                source: Address::parse(crate::wallet::ZERO_ADDRESS)
+                source: Address::parse(crate::chain::wallet::ZERO_ADDRESS)
                     .expect("the zero address is valid"),
-                treasury: Address::parse(crate::wallet::ZERO_ADDRESS)
+                treasury: Address::parse(crate::chain::wallet::ZERO_ADDRESS)
                     .expect("the zero address is valid"),
-                open_collective: Address::parse(crate::wallet::ZERO_ADDRESS)
+                open_collective: Address::parse(crate::chain::wallet::ZERO_ADDRESS)
                     .expect("the zero address is valid"),
             },
             settlement: SettlementConfig::default(),

@@ -8,7 +8,7 @@
 use anyhow::{Context, Result};
 
 use crate::Engine;
-use crate::settlement::proposal::RoundProposal;
+use crate::chain::settlement::proposal::RoundProposal;
 
 use crate::cli::args::ProposeArgs;
 use crate::cli::commands::plan;

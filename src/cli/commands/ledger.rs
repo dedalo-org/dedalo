@@ -1,7 +1,7 @@
 //! `dedalo ledger` — the append-only history of what Dedalo did.
 
 use crate::Engine;
-use crate::ledger::LedgerEntry;
+use crate::storage::ledger::LedgerEntry;
 use anyhow::Result;
 
 use crate::cli::args::LedgerArgs;

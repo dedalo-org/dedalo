@@ -8,9 +8,9 @@
 //! 1. [`git`] reads merge commits from the repository — the only source of
 //!    truth about who contributed what.
 //! 2. [`attribution`] scores those merges into integer contribution weights.
-//! 3. [`payout`] cuts fees ([`treasury`]), resolves contributors to wallets
-//!    ([`identity`]) and produces a content-addressed [`payout::PayoutPlan`].
-//! 4. [`settlement`] executes the plan, or simulates it.
+//! 3. [`payout`] cuts fees ([`money::treasury`]), resolves contributors to wallets
+//!    ([`attribution::identity`]) and produces a content-addressed [`payout::PayoutPlan`].
+//! 4. [`chain::settlement`] executes the plan, or simulates it.
 //!
 //! Everything before stage 4 is pure and offline: the same repository and the
 //! same `dedalo.toml` always yield the same plan id, on any machine.
@@ -34,28 +34,28 @@
 #![warn(missing_docs)]
 #![warn(rustdoc::broken_intra_doc_links)]
 
+// One module per concern, and every one of them a directory. A file at the
+// top of `src/` is a concern nobody has decided the shape of yet.
+//
+// Each module documents itself, in its own `//!` header. A `///` here as well
+// would merge into that header from a different scope, and every intra-doc
+// link inside it would resolve against the crate root instead of the module.
+
 pub mod attribution;
+pub mod chain;
+pub mod git;
+pub mod money;
+pub mod payout;
+pub mod storage;
+
+pub mod config;
+pub mod error;
 
 #[cfg(feature = "cli")]
 pub mod cli;
 
-pub mod config;
-/// Error and result types shared by every stage.
-pub mod error;
-pub mod git;
-pub mod identity;
-pub mod ledger;
-pub mod merkle;
-pub mod money;
-pub mod payout;
-pub mod settlement;
-pub mod store;
-
 #[cfg(feature = "testing")]
 pub mod testing;
-
-pub mod treasury;
-pub mod wallet;
 
 pub use config::Config;
 pub use error::{Error, Result};
@@ -64,11 +64,11 @@ pub use payout::PayoutPlan;
 use std::path::{Path, PathBuf};
 
 use attribution::Attribution;
+use chain::settlement::{Settlement, SettlementReceipt};
 use git::{CliGit, GitBackend, HistoryQuery, MergeEvent};
-use ledger::{Ledger, LedgerEntry, State};
 use money::Amount;
 use payout::{PlanBuilder, PlanRange};
-use settlement::{Settlement, SettlementReceipt};
+use storage::ledger::{Ledger, LedgerEntry, State};
 
 /// What a settlement is allowed to do.
 ///

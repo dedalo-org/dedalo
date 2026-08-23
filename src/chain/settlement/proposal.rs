@@ -23,13 +23,13 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::chain::merkle::ClaimTree;
+use crate::chain::settlement::abi;
+use crate::chain::wallet::Address;
 use crate::config::Config;
 use crate::error::{Error, Result};
-use crate::merkle::ClaimTree;
 use crate::money::Amount;
 use crate::payout::PayoutPlan;
-use crate::settlement::abi;
-use crate::wallet::Address;
 
 /// One transaction for a signer to execute.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -6,7 +6,7 @@
 use std::path::Path;
 
 use crate::Engine;
-use crate::wallet::Address;
+use crate::chain::wallet::Address;
 use anyhow::{Context, Result, bail};
 use toml_edit::{Array, DocumentMut, Item, Table, value};
 

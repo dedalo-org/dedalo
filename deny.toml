@@ -9,7 +9,16 @@ version = 2
 # Every known advisory is an error. Add a documented exception here rather
 # than lowering the bar.
 yanked = "deny"
-ignore = []
+ignore = [
+  # `paste` is unmaintained, not vulnerable. It arrives through
+  # alloy-sol-types, which is the ABI encoder this project chose over writing
+  # one by hand, and it is a proc macro: it runs at compile time and is in no
+  # shipped artifact. Removing it means removing alloy.
+  #
+  # Revisit when alloy drops it. This is an exception with a reason and an
+  # exit condition, which is the only kind worth having.
+  { id = "RUSTSEC-2024-0436", reason = "unmaintained proc macro, transitive through alloy-sol-types, not in any shipped artifact" },
+]
 
 [bans]
 multiple-versions = "warn"

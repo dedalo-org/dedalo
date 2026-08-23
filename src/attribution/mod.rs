@@ -5,6 +5,8 @@
 //! identical weights. Scores are integers (milli-points) so no floating point
 //! rounding can drift between machines.
 
+pub mod identity;
+
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};

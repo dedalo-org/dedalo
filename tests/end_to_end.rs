@@ -5,14 +5,14 @@
 //! them, and turning them into a settled round. The repository harness lives
 //! in `dedalo::testing`, so downstream crates can use the same one.
 
+use dedalo::attribution::identity::Identity;
+use dedalo::chain::settlement::DryRunSettlement;
+use dedalo::chain::wallet::Address;
 use dedalo::config::Config;
 use dedalo::git::{CliGit, GitBackend, HistoryQuery};
-use dedalo::identity::Identity;
-use dedalo::ledger::Ledger;
 use dedalo::money::Amount;
-use dedalo::settlement::DryRunSettlement;
+use dedalo::storage::ledger::Ledger;
 use dedalo::testing::TempRepo;
-use dedalo::wallet::Address;
 use dedalo::{Engine, payout::PayeeKind};
 
 fn config_for(repo: &TempRepo) -> Config {
