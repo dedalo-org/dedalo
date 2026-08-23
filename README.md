@@ -281,7 +281,6 @@ repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 40);
 | Releases | `.github/workflows/release.yml` — tagged builds for five targets, checksums, GitHub release, crates.io |
 | Supply chain | `.github/workflows/security.yml` — `cargo-deny` and `cargo-audit`, weekly and on manifest changes |
 | Dependencies | Dependabot, grouped weekly PRs for Cargo and Actions |
-| Editors | `.vscode/` for VS Code |
 | Versioning | one version and one tag for the whole workspace, bumped by a reviewable release pull request — see [RELEASING.md](RELEASING.md) |
 | Changelog | generated from Conventional Commit subjects with `git-cliff`; the release notes and `CHANGELOG.md` are the same text |
 | Distribution | install script, `cargo install`, `cargo binstall`, GitHub Action |

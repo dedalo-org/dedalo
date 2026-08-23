@@ -45,8 +45,9 @@ jobs:
             settlement
             ledger
             config
+            wallet
+            security
             docs
-            nix
             ci
             release
           requireScope: false
