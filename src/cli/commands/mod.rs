@@ -2,6 +2,7 @@ pub mod identity;
 pub mod init;
 pub mod ledger;
 pub mod plan;
+pub mod propose;
 pub mod scan;
 pub mod settle;
 pub mod status;

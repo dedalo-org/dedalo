@@ -68,6 +68,30 @@ pub enum Command {
     /// Recompute the ledger chain and confirm nothing was changed after the
     /// fact. Anyone with a clone can run it.
     Verify,
+
+    /// Emit the transactions a multisig must run to fund a round. Dedalo
+    /// signs nothing and holds no key.
+    Propose(ProposeArgs),
+}
+
+/// Arguments for `dedalo propose`.
+#[derive(Debug, Args)]
+pub struct ProposeArgs {
+    /// Propose a plan that was already saved, by id.
+    #[arg(long, value_name = "PLAN_ID", conflicts_with = "amount")]
+    pub plan: Option<String>,
+
+    /// Compute a fresh plan of this size and propose it.
+    #[arg(long, value_name = "AMOUNT", required_unless_present = "plan")]
+    pub amount: Option<String>,
+
+    #[command(flatten)]
+    pub range: RangeArgs,
+
+    /// Store the plan before proposing it, so the round the signers execute
+    /// is the one on disk.
+    #[arg(long)]
+    pub save: bool,
 }
 
 #[derive(Debug, Args)]

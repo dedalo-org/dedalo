@@ -67,13 +67,12 @@ open_collective = "0x0000000000000000000000000000000000000000"
 
 [settlement]
 # `dry-run` computes and verifies a round without spending anything.
-# Switch to `evm` once the wallets above are real.
+# Switch to `evm` once the wallets above are real and a claim contract is
+# deployed. Dedalo never signs: `dedalo propose` prints the transactions, and
+# people execute them from the project's multisig.
 backend = "dry-run"
-# rpc_url = "https://mainnet.base.org"
 # chain_id = 8453
-# contract = "0x0000000000000000000000000000000000000000"
-# Env var holding the signing key. The key itself never goes in this file.
-signer_env = "DEDALO_SIGNER_KEY"
+# contract = "0x0000000000000000000000000000000000000000"   # claim contract
 
 # Contributors and their wallets. Add them with:
 #   dedalo identity link <handle> <wallet> --email <git-email>

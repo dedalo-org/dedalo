@@ -5,6 +5,10 @@
 # dedalo.toml and .dedalo/ are meant to be committed: the funding rules and
 # the payout ledger are part of the project's public record.
 
+# forge build output
+/contracts/out
+/contracts/cache
+
 # Build outputs of the release and docs pipelines
 /dist
 /_site

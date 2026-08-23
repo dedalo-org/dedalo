@@ -5,8 +5,10 @@
 //! [`crate::payout`]; a backend only signs and broadcasts what a plan already
 //! says, after re-verifying it.
 
+pub mod abi;
 pub mod dry_run;
 pub mod evm;
+pub mod proposal;
 
 pub use dry_run::DryRunSettlement;
 pub use evm::EvmSettlement;

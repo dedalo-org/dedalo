@@ -24,6 +24,9 @@
       - any-glob-to-any-file:
           - src/settlement/**
           - src/ledger.rs
+          - src/store.rs
+          - src/merkle.rs
+          - contracts/**
 
 "area: cli":
   - changed-files:

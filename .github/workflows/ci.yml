@@ -258,13 +258,31 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  contracts:
+    timeout-minutes: 15
+    name: contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: stable
+      # The contract is the half of the money path that cannot be patched
+      # after it ships, and its tests are pinned to Merkle vectors the Rust
+      # side produces. If the two ever disagree, this is where it shows.
+      - name: forge test
+        working-directory: contracts
+        run: forge test -vv
+
   # A single gate for branch protection, so adding a job above does not
   # require reconfiguring the repository.
   ci-ok:
     timeout-minutes: 5
     name: CI
     if: always()
-    needs: [lint, test, msrv, docs, coverage, packaging, semver]
+    needs: [lint, test, msrv, docs, coverage, packaging, semver, contracts]
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any job failed

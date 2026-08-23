@@ -132,9 +132,10 @@ merged the code:
     amount: "1000"
 ```
 
-Set `command: settle` and `execute: true` to broadcast, with the signing key in
-the environment variable named by `settlement.signer_env`. It defaults to a
-simulation, because the safe thing should be the default.
+It defaults to a simulation, because the safe thing should be the default —
+and nothing else is available: **Dedalo holds no signing key.** A round is
+funded by people executing what `dedalo propose` prints, from the project's
+multisig. See [How funds move](docs/settlement-architecture.md).
 
 ## Quickstart
 
@@ -206,13 +207,50 @@ open_collective = "0x…"
 
 [settlement]
 backend = "dry-run"          # or "evm"
-signer_env = "DEDALO_SIGNER_KEY"   # the key itself never goes in this file
+chain_id = 8453
+contract = "0x…"             # the claim contract a round is deposited into
 
 [[identities]]
 handle = "ada"
 wallet = "0x…"
 emails = ["ada@example.com"]
 ```
+
+### How a round actually pays
+
+Dedalo holds no signing key, and no backend broadcasts. A round is deposited
+once against a Merkle root, and each contributor claims their own share:
+
+```text
+dedalo plan     ─▶  a reviewed PayoutPlan, content-addressed
+dedalo propose  ─▶  1. approve(claimContract, total)
+                    2. deposit(planId, merkleRoot, token, total)
+                        ↓
+                    a multisig, signed by people who are not one person
+                        ↓
+                    contributors claim, each paying their own gas
+```
+
+`dedalo propose` prints those two transactions with their calldata encoded, so
+a signer compares them against a plan they can read rather than trusting a
+tool they cannot. Nothing in that path opens a socket.
+
+Three things this buys, each of which was a hole in the obvious design:
+
+- **A contributor without a linked wallet is not a problem.** Their share sits
+  in the round until they claim it. `undistributed` stops meaning "money with
+  nowhere to go" and starts meaning "not claimed yet".
+- **The project pays one transaction's gas**, not one per payee.
+- **A key in CI cannot drain the treasury**, because there is no key in CI.
+  Everything with write access to a workflow would have been able to reach it.
+
+The contract is [`contracts/src/DedaloClaim.sol`]. Its test suite is pinned to
+a Merkle root and five proofs produced by the Rust implementation, so the two
+independent implementations of the leaf encoding check each other. It is
+**unaudited and undeployed** — [How funds move](docs/settlement-architecture.md)
+lists what has to exist before it holds anything real.
+
+[`contracts/src/DedaloClaim.sol`]: contracts/src/DedaloClaim.sol
 
 ### The ledger is a hash chain
 
