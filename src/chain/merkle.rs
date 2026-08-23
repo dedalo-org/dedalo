@@ -160,13 +160,13 @@ impl ClaimTree {
         while levels.last().expect("levels is never empty").len() > 1 {
             let below = levels.last().expect("levels is never empty");
             let mut next = Vec::with_capacity(below.len().div_ceil(2));
-            let mut pairs = below.chunks_exact(2);
-            for pair in &mut pairs {
-                next.push(hash_pair(pair[0], pair[1]));
+            let (pairs, remainder) = below.as_chunks::<2>();
+            for [left, right] in pairs {
+                next.push(hash_pair(*left, *right));
             }
             // Promoted, never hashed with itself: `hash_pair(x, x)` would let
             // a proof for `x` be replayed as a proof for the node above it.
-            if let [odd] = pairs.remainder() {
+            if let [odd] = remainder {
                 next.push(*odd);
             }
             levels.push(next);
