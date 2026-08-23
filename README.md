@@ -442,7 +442,7 @@ repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 40);
 | Changelog | generated from Conventional Commit subjects with `git-cliff`; the release notes and `CHANGELOG.md` are the same text |
 | Distribution | install script, `cargo install`, `cargo binstall`, GitHub Action |
 | Branch policy | `.github/rulesets/main.json`, importable in Settings → Rules |
-| Site | `site/` published to GitHub Pages with the API reference under `/api/` |
+| Site | `site/` publishes the API reference at [`/dedalo/api/`](https://dedalo-org.github.io/dedalo/api/); the project's own page is at [dedalo-org.github.io](https://dedalo-org.github.io/) |
 
 Public items must be documented: the crate sets `#![warn(missing_docs)]`
 and CI builds rustdoc with `-D warnings`, so the published API reference

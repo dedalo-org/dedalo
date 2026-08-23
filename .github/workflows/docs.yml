@@ -67,9 +67,11 @@ jobs:
           # Structure, CSS, metadata and every internal link — resolved
           # against the tree that is about to be published, so a link to the
           # API reference is checked against the API reference that exists.
+          # `/dedalo/` serves the reference and nothing else now: the landing
+          # page moved to the organisation's own repository. Links to it are
+          # written as full URLs, which the checker skips as remote.
           scripts/check-site.py --root site --built _site
           test -f _site/api/dedalo/index.html
-          test -f _site/robots.txt
           test -f _site/sitemap.xml
           echo "site tree checked and complete" >> "$GITHUB_STEP_SUMMARY"
 

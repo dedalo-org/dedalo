@@ -114,6 +114,16 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path("site"))
     parser.add_argument(
+        "--external-prefix",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help=(
+            "an absolute path prefix served by another deployment on this "
+            "domain, e.g. /dedalo/ — links under it are not resolved locally"
+        ),
+    )
+    parser.add_argument(
         "--built",
         type=Path,
         default=None,
@@ -179,6 +189,12 @@ def main() -> int:
             if href.startswith("#"):
                 if href[1:] and href[1:] not in structure.ids:
                     errors.append(f"{page}: `{href}` points at no element on the page")
+                continue
+            if any(href.startswith(prefix) for prefix in args.external_prefix):
+                # Served by a different deployment of the same domain, so it
+                # cannot be resolved here. Declared rather than guessed: a
+                # typo in one of these is still a broken link, and silently
+                # skipping every absolute path would hide it.
                 continue
             if args.built is not None:
                 relative = href
