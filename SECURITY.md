@@ -13,7 +13,7 @@ ordinary bug:
 ## Reporting
 
 Report privately through
-[GitHub Security Advisories](https://github.com/4137314/dedalo/security/advisories/new).
+[GitHub Security Advisories](https://github.com/dedalo-org/dedalo/security/advisories/new).
 Please include:
 
 - what an attacker or a mistake can cause, concretely, in amounts;

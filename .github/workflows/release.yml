@@ -192,7 +192,7 @@ jobs:
             echo "### Install"
             echo
             echo '```bash'
-            echo 'curl -fsSL https://raw.githubusercontent.com/4137314/dedalo/main/install.sh | sh'
+            echo 'curl -fsSL https://raw.githubusercontent.com/dedalo-org/dedalo/main/install.sh | sh'
             echo 'cargo install dedalo --locked'
             echo 'cargo binstall dedalo'
             echo '```'
@@ -201,12 +201,12 @@ jobs:
             echo 'build provenance:'
             echo
             echo '```bash'
-            echo 'gh attestation verify dedalo-*.tar.gz --repo 4137314/dedalo'
+            echo 'gh attestation verify dedalo-*.tar.gz --repo dedalo-org/dedalo'
             echo '```'
           } > release-notes.md
       # Signed provenance ties every archive to this repository, this workflow
       # and this commit, so a download can be checked against its origin:
-      #   gh attestation verify dedalo-*.tar.gz --repo 4137314/dedalo
+      #   gh attestation verify dedalo-*.tar.gz --repo dedalo-org/dedalo
       - uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
         with:
           subject-path: |

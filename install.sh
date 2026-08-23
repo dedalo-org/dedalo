@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install the dedalo CLI from a GitHub release.
 #
-#   curl -fsSL https://raw.githubusercontent.com/4137314/dedalo/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/dedalo-org/dedalo/main/install.sh | sh
 #
 # Environment:
 #   DEDALO_VERSION   version to install, e.g. v0.1.0 (default: latest)
@@ -13,7 +13,7 @@
 
 set -eu
 
-REPO="4137314/dedalo"
+REPO="dedalo-org/dedalo"
 BIN="dedalo"
 INSTALL_DIR="${DEDALO_INSTALL:-$HOME/.local/bin}"
 

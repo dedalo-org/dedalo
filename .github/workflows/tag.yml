@@ -66,7 +66,7 @@ jobs:
             -f ref="refs/tags/${TAG}" -f sha="$tag_sha" >/dev/null
           echo "Created $TAG" >> "$GITHUB_STEP_SUMMARY"
 
-          # The major tag is the one that moves: `uses: 4137314/dedalo@v0` has
+          # The major tag is the one that moves: `uses: dedalo-org/dedalo@v0` has
           # to follow the latest release. It points at an immutable release
           # tag, so nothing already published changes underneath anyone.
           major_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/tags" \

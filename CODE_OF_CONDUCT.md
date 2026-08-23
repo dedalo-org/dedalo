@@ -27,7 +27,7 @@ yours is a conduct violation, not just a technical one.
 ## Enforcement
 
 Report concerns to the maintainers through
-[a private security advisory](https://github.com/4137314/dedalo/security/advisories/new)
+[a private security advisory](https://github.com/dedalo-org/dedalo/security/advisories/new)
 if the matter is sensitive, or by opening an issue if it is not. Maintainers
 will respond as promptly as they can, keep reports confidential where possible,
 and may warn, temporarily block, or permanently ban anyone whose behaviour

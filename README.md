@@ -1,9 +1,8 @@
 # Dedalo
 
-[![CI](https://github.com/4137314/dedalo/actions/workflows/ci.yml/badge.svg)](https://github.com/4137314/dedalo/actions/workflows/ci.yml)
-[![Nix](https://github.com/4137314/dedalo/actions/workflows/nix.yml/badge.svg)](https://github.com/4137314/dedalo/actions/workflows/nix.yml)
-[![Security](https://github.com/4137314/dedalo/actions/workflows/security.yml/badge.svg)](https://github.com/4137314/dedalo/actions/workflows/security.yml)
-[![docs](https://img.shields.io/badge/docs-api%20reference-blue)](https://4137314.github.io/dedalo/api/)
+[![CI](https://github.com/dedalo-org/dedalo/actions/workflows/ci.yml/badge.svg)](https://github.com/dedalo-org/dedalo/actions/workflows/ci.yml)
+[![Security](https://github.com/dedalo-org/dedalo/actions/workflows/security.yml/badge.svg)](https://github.com/dedalo-org/dedalo/actions/workflows/security.yml)
+[![docs](https://img.shields.io/badge/docs-api%20reference-blue)](https://dedalo-org.github.io/dedalo/api/)
 [![crates.io](https://img.shields.io/crates/v/dedalo.svg)](https://crates.io/crates/dedalo)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -86,14 +85,14 @@ The test suite is 66 tests in four layers:
 
 ```bash
 # script — verifies the published SHA-256 before installing
-curl -fsSL https://raw.githubusercontent.com/4137314/dedalo/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/dedalo-org/dedalo/main/install.sh | sh
 
 cargo install dedalo --locked      # from source
 cargo binstall dedalo              # prebuilt, no compile
 ```
 
 Windows builds are published as `.zip` on the
-[releases page](https://github.com/4137314/dedalo/releases).
+[releases page](https://github.com/dedalo-org/dedalo/releases).
 
 ### In CI
 
@@ -105,7 +104,7 @@ merged the code:
   with:
     fetch-depth: 0          # attribution needs the full history
 
-- uses: 4137314/dedalo@v0
+- uses: dedalo-org/dedalo@v0
   with:
     command: plan
     amount: "1000"

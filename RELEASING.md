@@ -80,7 +80,7 @@ fix, and re-run **Tag**. Never move a tag that a release already published.
 ### The one tag that does move
 
 `v0` — and `v1` after that — follows the latest release, because
-`uses: 4137314/dedalo@v0` is how a GitHub Action is consumed. It is a pointer
+`uses: dedalo-org/dedalo@v0` is how a GitHub Action is consumed. It is a pointer
 to an immutable release tag, so nothing that was published ever changes
 underneath someone. Pin `@v0.1.0` instead if you want the workflow frozen.
 
@@ -101,11 +101,11 @@ Anyone can check that a published binary matches what the tag says:
 
 ```bash
 # The checksum published beside it
-curl -fsSL https://github.com/4137314/dedalo/releases/download/v0.1.0/dedalo-v0.1.0-x86_64-unknown-linux-gnu.tar.gz.sha256
+curl -fsSL https://github.com/dedalo-org/dedalo/releases/download/v0.1.0/dedalo-v0.1.0-x86_64-unknown-linux-gnu.tar.gz.sha256
 sha256sum dedalo-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
 
 # Or the signed provenance, which also proves which workflow built it
-gh attestation verify dedalo-v0.1.0-x86_64-unknown-linux-gnu.tar.gz --repo 4137314/dedalo
+gh attestation verify dedalo-v0.1.0-x86_64-unknown-linux-gnu.tar.gz --repo dedalo-org/dedalo
 ```
 
 Or rebuild it from source with the pinned toolchain:

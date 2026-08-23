@@ -4,7 +4,7 @@
 
 [project]
 name = "dedalo"
-repository = "https://github.com/4137314/dedalo"
+repository = "https://github.com/dedalo-org/dedalo"
 # Open Collective slug this project self-funds through.
 open_collective = "dedalo"
 
