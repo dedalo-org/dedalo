@@ -4,14 +4,14 @@
 //! with thousands of generated ones. Every property here is a promise the
 //! README makes, so a failure is a bug in the promise, not in the test.
 
-use dedalo_core::attribution::{Attribution, Contribution};
-use dedalo_core::config::Config;
-use dedalo_core::git::Author;
-use dedalo_core::identity::Identity;
-use dedalo_core::money::{Amount, Asset};
-use dedalo_core::payout::{PayeeKind, PlanBuilder, PlanRange};
-use dedalo_core::treasury::FeeSchedule;
-use dedalo_core::wallet::Address;
+use dedalo::attribution::{Attribution, Contribution};
+use dedalo::config::Config;
+use dedalo::git::Author;
+use dedalo::identity::Identity;
+use dedalo::money::{Amount, Asset};
+use dedalo::payout::{PayeeKind, PlanBuilder, PlanRange};
+use dedalo::treasury::FeeSchedule;
+use dedalo::wallet::Address;
 use proptest::prelude::*;
 
 /// Realistic money: up to a quintillion base units, which is ~10^12 USDC.

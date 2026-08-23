@@ -217,35 +217,24 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "async-trait",
  "clap",
- "dedalo-core",
+ "dedalo",
+ "hex",
  "libc",
  "predicates",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "toml",
- "toml_edit",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "dedalo-core"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "dedalo-core",
- "hex",
  "proptest",
  "serde",
  "serde_json",
  "sha2",
  "sha3",
+ "tempfile",
  "thiserror",
+ "tokio",
  "toml",
+ "toml_edit",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

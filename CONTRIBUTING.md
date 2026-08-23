@@ -45,17 +45,17 @@ the body. [RELEASING.md](RELEASING.md) has the full policy.
 
 - **One concern per PR.** A refactor and a behaviour change in the same diff
   are two PRs.
-- **Public API changes carry rustdoc.** `dedalo-core` sets
+- **Public API changes carry rustdoc.** The crate sets
   `#![warn(missing_docs)]` and CI builds docs with `-D warnings`, so an
   undocumented `pub` item is a build failure.
 - **Money changes carry tests.** Anything touching `money`, `attribution`,
   `treasury` or `payout` needs a test proving the amounts still balance —
   including the awkward cases: zero weights, a single payee, amounts that do
   not divide evenly. A new rule about what people are paid belongs in
-  `crates/dedalo-core/tests/properties.rs`, where generated inputs will try to
+  `tests/properties.rs`, where generated inputs will try to
   break it, not only in one example you chose.
 - **CLI output changes carry tests.** `action.yml` parses `--json`; renaming a
-  field breaks it silently. `crates/dedalo-cli/tests/cli.rs` is what catches
+  field breaks it silently. `tests/cli.rs` is what catches
   that.
 - **Commit messages say why.** The subject is the change; the body is the
   reason.
@@ -64,11 +64,11 @@ the body. [RELEASING.md](RELEASING.md) has the full policy.
 
 ## Where things live
 
-`crates/dedalo-core/src/lib.rs` documents the pipeline and exposes `Engine`,
+`src/lib.rs` documents the pipeline and exposes `Engine`,
 the shortest path through all four stages. From there: `money.rs` (the
 arithmetic), `payout.rs` (the artifact), `treasury.rs` (the fee split). The
 invariants the project guarantees are stated as property tests in
-`crates/dedalo-core/tests/properties.rs` — read those before changing anything
+`tests/properties.rs` — read those before changing anything
 that decides an amount.
 
 ## Getting paid

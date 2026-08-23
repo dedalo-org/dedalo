@@ -13,6 +13,9 @@ use clap::{Args, Parser, Subcommand};
                   distributes a funding round to contributor wallets — taking a \
                   protocol fee that flows to the network's Open Collective."
 )]
+/// One parsed `dedalo` invocation: the global options, plus the command.
+///
+/// Build it with `Cli::parse()` and hand it to [`crate::cli::run`].
 pub struct Cli {
     /// Repository to operate on. Defaults to the current directory.
     #[arg(long, short = 'C', global = true, value_name = "PATH")]
@@ -26,11 +29,16 @@ pub struct Cli {
     #[arg(long, short = 'v', global = true, action = clap::ArgAction::Count)]
     pub verbose: u8,
 
+    /// The subcommand to run.
     #[command(subcommand)]
     pub command: Command,
 }
 
 #[derive(Debug, Subcommand)]
+/// Everything `dedalo` can be asked to do.
+///
+/// The doc comment on each variant is what `--help` prints, so it is written
+/// for someone at a terminal rather than for a reader of the API reference.
 pub enum Command {
     /// Create a dedalo.toml in this repository.
     Init(InitArgs),

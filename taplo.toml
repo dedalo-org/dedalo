@@ -1,5 +1,9 @@
 # Formatting for TOML: Cargo manifests, dedalo.toml, this file.
 include = ["**/*.toml"]
+# `cargo package` writes a normalised manifest under target/. It is generated,
+# nobody edits it, and checking it makes a clean tree fail after a packaging
+# run.
+exclude = ["target/**"]
 
 [formatting]
 align_entries = false

@@ -3,13 +3,13 @@
 //! Simulation is the default. Real money only moves behind `--execute`, and
 //! only through the backend configured in `dedalo.toml`.
 
+use crate::settlement::{DryRunSettlement, backend_from_config};
+use crate::{Engine, SettlementOptions};
 use anyhow::{Context, Result};
-use dedalo_core::settlement::{DryRunSettlement, backend_from_config};
-use dedalo_core::{Engine, SettlementOptions};
 
-use crate::cli::SettleArgs;
-use crate::commands::plan;
-use crate::ui;
+use crate::cli::args::SettleArgs;
+use crate::cli::commands::plan;
+use crate::cli::ui;
 
 pub async fn run(engine: &Engine, args: &SettleArgs, json: bool) -> Result<()> {
     let payout = match &args.plan {
@@ -51,7 +51,7 @@ pub async fn run(engine: &Engine, args: &SettleArgs, json: bool) -> Result<()> {
         .await?;
 
     if json {
-        return crate::commands::print_json(&receipt);
+        return crate::cli::commands::print_json(&receipt);
     }
 
     if receipt.dry_run {

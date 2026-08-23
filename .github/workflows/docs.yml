@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "crates/**"
+      - "src/**"
       - "site/**"
       - "Cargo.*"
       - ".github/workflows/docs.yml"
@@ -54,9 +54,9 @@ jobs:
           <!doctype html>
           <meta charset="utf-8">
           <title>Dedalo — API reference</title>
-          <meta http-equiv="refresh" content="0; url=dedalo_core/index.html">
-          <link rel="canonical" href="dedalo_core/index.html">
-          <p>Redirecting to the <a href="dedalo_core/index.html">dedalo_core</a> API reference.</p>
+          <meta http-equiv="refresh" content="0; url=dedalo/index.html">
+          <link rel="canonical" href="dedalo/index.html">
+          <p>Redirecting to the <a href="dedalo/index.html">dedalo</a> API reference.</p>
           HTML
           # Pages must not run Jekyll over rustdoc's output.
           touch _site/.nojekyll
@@ -68,7 +68,6 @@ jobs:
           # against the tree that is about to be published, so a link to the
           # API reference is checked against the API reference that exists.
           scripts/check-site.py --root site --built _site
-          test -f _site/api/dedalo_core/index.html
           test -f _site/api/dedalo/index.html
           test -f _site/robots.txt
           test -f _site/sitemap.xml

@@ -3,31 +3,32 @@
 "area: money":
   - changed-files:
       - any-glob-to-any-file:
-          - crates/dedalo-core/src/money.rs
-          - crates/dedalo-core/src/treasury.rs
-          - crates/dedalo-core/src/payout.rs
+          - src/money.rs
+          - src/treasury.rs
+          - src/payout.rs
+          - src/wallet.rs
 
 "area: attribution":
   - changed-files:
       - any-glob-to-any-file:
-          - crates/dedalo-core/src/attribution.rs
-          - crates/dedalo-core/src/identity.rs
+          - src/attribution.rs
+          - src/identity.rs
 
 "area: git":
   - changed-files:
       - any-glob-to-any-file:
-          - crates/dedalo-core/src/git/**
+          - src/git/**
 
 "area: settlement":
   - changed-files:
       - any-glob-to-any-file:
-          - crates/dedalo-core/src/settlement/**
-          - crates/dedalo-core/src/ledger.rs
+          - src/settlement/**
+          - src/ledger.rs
 
 "area: cli":
   - changed-files:
       - any-glob-to-any-file:
-          - crates/dedalo-cli/**
+          - src/cli/**
 
 "area: docs":
   - changed-files:

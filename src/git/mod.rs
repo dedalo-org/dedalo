@@ -4,9 +4,9 @@
 //! payout from merge commits that are already in the repository, so any third
 //! party can recompute a plan from the same history and get the same numbers.
 
-mod cli;
+mod process;
 
-pub use cli::CliGit;
+pub use process::CliGit;
 
 use serde::{Deserialize, Serialize};
 

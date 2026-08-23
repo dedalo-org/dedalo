@@ -5,14 +5,14 @@
 
 use std::path::Path;
 
+use crate::Engine;
+use crate::wallet::Address;
 use anyhow::{Context, Result, bail};
-use dedalo_core::Engine;
-use dedalo_core::wallet::Address;
 use toml_edit::{Array, DocumentMut, Item, Table, value};
 
-use crate::cli::{IdentityCommand, RangeArgs};
-use crate::commands::display_path;
-use crate::ui::{self, Align, Table as OutTable};
+use crate::cli::args::{IdentityCommand, RangeArgs};
+use crate::cli::commands::display_path;
+use crate::cli::ui::{self, Align, Table as OutTable};
 
 pub fn run(engine: &Engine, command: &IdentityCommand, json: bool) -> Result<()> {
     match command {
@@ -30,7 +30,7 @@ pub fn run(engine: &Engine, command: &IdentityCommand, json: bool) -> Result<()>
 fn list(engine: &Engine, json: bool) -> Result<()> {
     let identities = &engine.config().identities;
     if json {
-        return crate::commands::print_json(identities);
+        return crate::cli::commands::print_json(identities);
     }
     if identities.is_empty() {
         println!(
@@ -123,7 +123,7 @@ fn link(engine: &Engine, handle: &str, wallet: &str, emails: &[String], json: bo
     write_document(path, &doc)?;
 
     if json {
-        return crate::commands::print_json(&serde_json::json!({
+        return crate::cli::commands::print_json(&serde_json::json!({
             "handle": handle,
             "wallet": wallet,
             "emails": emails,
@@ -151,7 +151,7 @@ fn remove(engine: &Engine, handle: &str, json: bool) -> Result<()> {
     write_document(path, &doc)?;
 
     if json {
-        return crate::commands::print_json(&serde_json::json!({ "removed": handle }));
+        return crate::cli::commands::print_json(&serde_json::json!({ "removed": handle }));
     }
     println!("{} {handle}", ui::green("removed"));
     Ok(())
@@ -172,7 +172,7 @@ fn missing(engine: &Engine, range: &RangeArgs, json: bool) -> Result<()> {
         .collect();
 
     if json {
-        return crate::commands::print_json(&unlinked);
+        return crate::cli::commands::print_json(&unlinked);
     }
     if unlinked.is_empty() {
         println!("{}", ui::green("every pending contributor has a wallet"));

@@ -8,17 +8,17 @@
 //! Each one that carries a `FOUND:` note is a regression test for a defect
 //! that was real in this codebase, not a hypothetical.
 
-use dedalo_core::attribution::{Attribution, AttributionPolicy, Contribution};
-use dedalo_core::config::Config;
-use dedalo_core::git::{Author, DiffStat, MergeEvent, MergedCommit};
-use dedalo_core::identity::Identity;
-use dedalo_core::ledger::Ledger;
-use dedalo_core::money::{Amount, Asset};
-use dedalo_core::payout::{PayeeKind, PayoutPlan, PlanBuilder, PlanRange};
-use dedalo_core::settlement::DryRunSettlement;
-use dedalo_core::testing::TempRepo;
-use dedalo_core::wallet::{Address, ZERO_ADDRESS};
-use dedalo_core::{Engine, SettlementOptions};
+use dedalo::attribution::{Attribution, AttributionPolicy, Contribution};
+use dedalo::config::Config;
+use dedalo::git::{Author, DiffStat, MergeEvent, MergedCommit};
+use dedalo::identity::Identity;
+use dedalo::ledger::Ledger;
+use dedalo::money::{Amount, Asset};
+use dedalo::payout::{PayeeKind, PayoutPlan, PlanBuilder, PlanRange};
+use dedalo::settlement::DryRunSettlement;
+use dedalo::testing::TempRepo;
+use dedalo::wallet::{Address, ZERO_ADDRESS};
+use dedalo::{Engine, SettlementOptions};
 use proptest::prelude::*;
 
 // ---------------------------------------------------------------------------
@@ -456,7 +456,7 @@ fn a_plan_id_cannot_steer_the_filesystem() {
 
 fn engine_for(repo: &TempRepo, config: Config) -> Engine {
     config.save(repo.path().join("dedalo.toml")).unwrap();
-    let git = dedalo_core::git::CliGit::discover(repo.path()).unwrap();
+    let git = dedalo::git::CliGit::discover(repo.path()).unwrap();
     let ledger = Ledger::open(repo.path()).unwrap();
     Engine::new(
         config,

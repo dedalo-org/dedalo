@@ -1,12 +1,12 @@
 //! `dedalo init` — write a starting `dedalo.toml`.
 
+use crate::Config;
+use crate::config::CONFIG_FILE;
 use anyhow::{Context, Result, bail};
-use dedalo_core::Config;
-use dedalo_core::config::CONFIG_FILE;
 
-use crate::cli::InitArgs;
-use crate::commands::{display_path, workdir};
-use crate::ui;
+use crate::cli::args::InitArgs;
+use crate::cli::commands::{display_path, workdir};
+use crate::cli::ui;
 
 /// Hand-written rather than serialized, so the file a maintainer opens
 /// explains itself. Kept in sync with `Config` by `parses_as_a_valid_config`.
@@ -122,7 +122,7 @@ pub fn run(args: &InitArgs, repo: Option<&std::path::PathBuf>, json: bool) -> Re
         .with_context(|| format!("cannot write {}", display_path(&path)))?;
 
     if json {
-        return crate::commands::print_json(&serde_json::json!({
+        return crate::cli::commands::print_json(&serde_json::json!({
             "created": path,
             "project": name,
             "branch": branch,

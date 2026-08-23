@@ -1,13 +1,24 @@
-//! `dedalo` — merge-to-earn funding for open source.
+//! The `dedalo` command-line interface.
+//!
+//! This lives in the library, behind the `cli` feature, so the binary is a
+//! three-line shim and the command surface can be exercised by tests in the
+//! same crate. A consumer who wants only the pipeline turns the feature off
+//! and pulls in neither `clap` nor a runtime.
+//!
+//! Everything below [`Cli`] is private on purpose: the commands are a user
+//! interface, not API. Depending on them from Rust would be depending on the
+//! shape of terminal output.
 
-mod cli;
+mod args;
 mod commands;
 mod ui;
 
+pub use args::{Cli, Command};
+
+use std::process::ExitCode;
+
 use anyhow::Result;
 use clap::Parser;
-
-use cli::{Cli, Command};
 
 /// Restore the default disposition for `SIGPIPE`.
 ///
@@ -27,20 +38,38 @@ fn restore_sigpipe() {
 #[cfg(not(unix))]
 fn restore_sigpipe() {}
 
-#[tokio::main]
-async fn main() {
+/// Parse the process arguments, run the command they name, and report.
+///
+/// Returns the exit code rather than calling `exit`, so destructors run and
+/// a test can drive the same path the binary takes.
+pub fn main() -> ExitCode {
     restore_sigpipe();
 
     let cli = Cli::parse();
     init_tracing(cli.verbose);
 
-    if let Err(error) = run(&cli).await {
-        eprintln!("{} {error:#}", ui::yellow("error:"));
-        std::process::exit(1);
+    let runtime = match tokio::runtime::Runtime::new() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            eprintln!(
+                "{} cannot start the async runtime: {error}",
+                ui::yellow("error:")
+            );
+            return ExitCode::FAILURE;
+        }
+    };
+
+    match runtime.block_on(run(&cli)) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("{} {error:#}", ui::yellow("error:"));
+            ExitCode::FAILURE
+        }
     }
 }
 
-async fn run(cli: &Cli) -> Result<()> {
+/// Dispatch one parsed invocation.
+pub async fn run(cli: &Cli) -> Result<()> {
     // `init` is the one command that runs before a config exists.
     if let Command::Init(args) = &cli.command {
         return commands::init::run(args, cli.repo.as_ref(), cli.json);

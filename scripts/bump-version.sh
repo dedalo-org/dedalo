@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-# Bump the workspace version everywhere it is written down.
+# Bump the crate version everywhere it is written down.
 #
-# The workspace keeps one version for both crates, so a release is a single
-# number and a single tag. Three places have to agree, and this script is the
-# only thing allowed to change them:
+# The library and the binary are one crate, so a release is a single number
+# and a single tag. Two places have to agree, and this script is the only
+# thing allowed to change them:
 #
-#   1. [workspace.package] version   — what both crates inherit
-#   2. [workspace.dependencies]      — dedalo-cli's pin on dedalo-core
-#   3. Cargo.lock                    — refreshed via `cargo update`
+#   1. [package] version   — the crate itself
+#   2. Cargo.lock          — refreshed via `cargo update`
+#
+# The dev-dependency on this same path carries no version, so it needs no
+# bump; neither do the `version = "0.1"` pins inside doc examples, which name
+# a compatible range rather than this release.
 #
 # Usage:
 #   scripts/bump-version.sh patch|minor|major|<explicit-version> [--dry-run]
@@ -57,18 +60,16 @@ if [ "$dry_run" = "--dry-run" ]; then
   exit 0
 fi
 
-# Only the workspace version line and the internal path dependency: never a
-# third-party version, and never a version inside a doc example.
+# Only the package version line: never a third-party version, and never a
+# version inside a doc example.
 sed -i.bak -E "0,/^version = \"$current\"$/s//version = \"$next\"/" Cargo.toml
-sed -i.bak -E "s|^(dedalo-core = \{ path = \"crates/dedalo-core\", version = )\"$current\"|\1\"$next\"|" Cargo.toml
 rm -f Cargo.toml.bak
 
 # Keep the lockfile in step without touching any other dependency.
-cargo update --workspace --quiet
+cargo update --package dedalo --quiet
 
-changed=$(grep -c "\"$next\"" Cargo.toml || true)
-if [ "$changed" -lt 2 ]; then
-  echo "expected two version occurrences after the bump, found $changed" >&2
+if ! grep -q "^version = \"$next\"$" Cargo.toml; then
+  echo "the version line did not change to $next" >&2
   exit 1
 fi
 

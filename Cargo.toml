@@ -1,38 +1,96 @@
-[workspace]
-resolver = "3"
-members = ["crates/dedalo-core", "crates/dedalo-cli"]
-
-[workspace.package]
+[package]
+name = "dedalo"
+description = "Merge-to-earn funding for open source: turn git merges into deterministic contributor payouts."
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85.0"
 license = "MIT"
 repository = "https://github.com/dedalo-org/dedalo"
+homepage = "https://dedalo-org.github.io/dedalo/"
+documentation = "https://docs.rs/dedalo"
 authors = ["Dedalo contributors"]
+readme = "README.md"
+keywords = ["git", "funding", "payouts", "open-source", "web3"]
+categories = ["command-line-utilities", "development-tools"]
 
-[workspace.dependencies]
-dedalo-core = { path = "crates/dedalo-core", version = "0.1.0" }
+# The published archive carries what someone building or auditing the crate
+# needs, and nothing that only serves the repository.
+exclude = [
+  "/.github",
+  "/site",
+  "/.dedalo",
+  # This project's own funding rules: a real record, but not a consumer's.
+  "/dedalo.toml",
+  "/scripts",
+  "/action.yml",
+  "/install.sh",
+  "/cliff.toml",
+  "/deny.toml",
+  "/taplo.toml",
+]
+
+[features]
+default = ["cli"]
+
+# The command-line interface, and the runtime and argument parsing it needs.
+# A library consumer turns this off — `default-features = false` — and pulls
+# in none of it.
+cli = ["dep:anyhow", "dep:clap", "dep:toml_edit", "dep:tokio", "dep:tracing-subscriber", "dep:libc"]
+
+# Exposes `dedalo::testing`, a harness for building throwaway repositories
+# with real merge history. Off by default so it never ships in a normal build.
+testing = []
+
+[[bin]]
+name = "dedalo"
+path = "src/main.rs"
+required-features = ["cli"]
+
+[dependencies]
+# The library.
+async-trait = "0.1"
+hex = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-toml = "0.9"
-toml_edit = "0.23"
-thiserror = "2"
-anyhow = "1"
-clap = { version = "4", features = ["derive", "env"] }
-async-trait = "0.1"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 sha2 = "0.10"
 sha3 = "0.10"
-hex = "0.4"
+thiserror = "2"
+toml = "0.9"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-libc = "0.2"
 
-# Test-only
-proptest = "1"
+# The CLI, behind the `cli` feature.
+anyhow = { version = "1", optional = true }
+clap = { version = "4", features = ["derive", "env"], optional = true }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"], optional = true }
+toml_edit = { version = "0.23", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { version = "0.2", optional = true }
+
+[dev-dependencies]
+# The integration tests need the `testing` harness, which a normal build must
+# not ship. A crate may depend on itself for dev only, which is what turns the
+# feature on for tests without turning it on for consumers.
+dedalo = { path = ".", features = ["testing"] }
 assert_cmd = "2"
 predicates = "3"
+proptest = "1"
 tempfile = "3"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+# `cargo binstall dedalo` fetches the release archive instead of compiling.
+# The layout below must match what .github/workflows/release.yml publishes.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/dedalo-v{ version }-{ target }{ archive-suffix }"
+bin-dir = "dedalo-v{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
 
 [profile.release]
 lto = "thin"

@@ -6,7 +6,7 @@
 //! to produce its outputs.
 
 use assert_cmd::Command;
-use dedalo_core::testing::TempRepo;
+use dedalo::testing::TempRepo;
 use predicates::str::contains;
 use serde_json::Value;
 use std::path::Path;
