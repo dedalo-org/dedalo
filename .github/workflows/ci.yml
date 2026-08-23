@@ -276,13 +276,63 @@ jobs:
         working-directory: contracts
         run: forge test -vv
 
+  verification:
+    timeout-minutes: 25
+    name: verification
+    runs-on: ubuntu-latest
+    env:
+      # Pinned by checksum, not by tag: this binary decides whether the
+      # contract's arithmetic is proved, and a moved tag would decide it too.
+      SOLC_VERSION: "0.8.33"
+      SOLC_SHA256: "1274e5c4621ae478090c5a1f48466fd3c5f658ed9e14b15a0b213dc806215468"
+      SOLC_FILE: "solc-linux-amd64-v0.8.33+commit.64118f21"
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+
+      # `verification.toml` accounts for every module under src/, and this
+      # fails if one is missing, if a declared proof's test is gone, if the
+      # money arithmetic in a module moved, or if an exemption stopped being
+      # true. It is the gate that makes the manifest mean something.
+      - name: every module is accounted for
+        run: cargo test --locked --all-features --test verification_manifest
+
+      # Proofs by exhaustion: fifty million fee schedules, every basis-point
+      # value, every small weight vector, every tree shape up to sixty-four.
+      # Release mode is the difference between half a minute and ten.
+      - name: exhaustive proofs
+        run: cargo test --locked --release --all-features --test exhaustive -- --ignored
+
+      - name: Install the solver and the pinned compiler
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends z3
+          curl -fsSL -o /tmp/solc \
+            "https://binaries.soliditylang.org/linux-amd64/${SOLC_FILE}"
+          echo "${SOLC_SHA256}  /tmp/solc" | sha256sum --check --strict
+          chmod +x /tmp/solc
+          /tmp/solc --version
+
+      # solc discharges every arithmetic and assertion condition in the
+      # contract. Fails if one stops being provable, if the count drifts from
+      # what verification.toml records, or if the checker meets a construct it
+      # cannot model — which would make it pass by not asking.
+      - name: contract proofs
+        run: scripts/verify-contracts.py --solc /tmp/solc
+
   # A single gate for branch protection, so adding a job above does not
   # require reconfiguring the repository.
   ci-ok:
     timeout-minutes: 5
     name: CI
     if: always()
-    needs: [lint, test, msrv, docs, coverage, packaging, semver, contracts]
+    needs: [lint, test, msrv, docs, coverage, packaging, semver, contracts, verification]
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any job failed
