@@ -7,6 +7,7 @@
 
 use assert_cmd::Command;
 use dedalo::testing::TempRepo;
+use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use serde_json::Value;
 use std::path::Path;
@@ -443,4 +444,59 @@ fn help_and_version_work_without_a_project() {
         .assert()
         .success()
         .stdout(contains("Dedalo reads merge history from git"));
+}
+
+/// An address with few hex letters carries few bits of checksum, and a typo
+/// in one is likelier to parse than a user would guess. `identity link` is
+/// the only moment a human chooses an address, so it is the only place worth
+/// saying so.
+#[test]
+fn linking_a_weakly_checksummed_address_warns_and_reports_the_bits() {
+    let repo = project();
+
+    // Seven hex letters, so seven bits: about one typo in 128 still parses.
+    // Found by the adversarial property test, and pinned there too.
+    let weak = "0x983703886C8736b984464129c94DAFa572291812";
+    dedalo(repo.path())
+        .args([
+            "identity",
+            "link",
+            "weak",
+            weak,
+            "--email",
+            "weak@example.com",
+        ])
+        .assert()
+        .success()
+        .stderr(contains("7 bits of checksum"))
+        .stderr(contains("1 in 128"));
+
+    let linked = json_of(
+        repo.path(),
+        &[
+            "identity",
+            "link",
+            "weak",
+            weak,
+            "--email",
+            "weak@example.com",
+        ],
+    );
+    assert_eq!(linked["checksum_bits"], 7);
+
+    // A well-populated address says nothing: a warning that always fires is
+    // a warning nobody reads.
+    let strong = "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB";
+    dedalo(repo.path())
+        .args([
+            "identity",
+            "link",
+            "strong",
+            strong,
+            "--email",
+            "strong@example.com",
+        ])
+        .assert()
+        .success()
+        .stderr(contains("bits of checksum").not());
 }

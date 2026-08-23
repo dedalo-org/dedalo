@@ -20,6 +20,7 @@ use dedalo::testing::TempRepo;
 use dedalo::wallet::{Address, ZERO_ADDRESS};
 use dedalo::{Engine, SettlementOptions};
 use proptest::prelude::*;
+use sha3::{Digest, Keccak256};
 
 // ---------------------------------------------------------------------------
 // fixtures
@@ -363,13 +364,96 @@ fn one_account_spelled_many_ways_receives_one_transfer() {
     plan.verify().unwrap();
 }
 
+/// EIP-55, implemented here from the specification.
+///
+/// The point of a second implementation is that the property below compares
+/// the crate against the standard rather than against itself. A test that
+/// asks the code under test what the right answer is proves nothing.
+fn eip55(lowercase_body: &str) -> String {
+    let hash = Keccak256::digest(lowercase_body.as_bytes());
+    lowercase_body
+        .chars()
+        .enumerate()
+        .map(|(index, c)| {
+            if !c.is_ascii_alphabetic() {
+                return c;
+            }
+            let nibble = if index % 2 == 0 {
+                hash[index / 2] >> 4
+            } else {
+                hash[index / 2] & 0x0f
+            };
+            if nibble >= 8 {
+                c.to_ascii_uppercase()
+            } else {
+                c
+            }
+        })
+        .collect()
+}
+
+/// FOUND: the property below used to assert that *every* single-character
+/// mutation is rejected. It is not, and cannot be.
+///
+/// EIP-55 carries its checksum in the capitalisation of the letters only, so
+/// an address holds one bit per character in `a-f`. A mutation that happens
+/// to land on another correctly-capitalised spelling is a valid address, and
+/// no implementation can tell the difference. These two were found by the
+/// property test on CI, at 7 and 10 bits of checksum respectively.
+///
+/// They are pinned here so the limit stays visible: this is what "the
+/// checksum protects you" actually buys.
+#[test]
+fn some_single_character_slips_survive_the_checksum() {
+    for (original, position, replacement, bits) in [
+        (
+            "0x983703886C8736b9844641B9c94DAFa572291812",
+            22usize,
+            '2',
+            7,
+        ),
+        (
+            "0x9d33df7B2951b0086D40814475869BE3A485a146",
+            8usize,
+            '1',
+            10,
+        ),
+    ] {
+        let mut hex: Vec<char> = original[2..].chars().collect();
+        assert_ne!(
+            hex[position], replacement,
+            "the mutation must change something"
+        );
+        hex[position] = replacement;
+        let candidate: String = hex.into_iter().collect();
+
+        // Independently: this really is a well-formed EIP-55 address.
+        assert_eq!(
+            eip55(&candidate.to_ascii_lowercase()),
+            candidate,
+            "the mutation was expected to land on a valid checksum"
+        );
+
+        let parsed = Address::parse(&format!("0x{candidate}"))
+            .expect("a validly checksummed address must parse");
+        assert_eq!(parsed.checksum_bits(), bits);
+        assert_ne!(parsed.as_str(), original, "it is a different account");
+    }
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(256))]
 
-    /// The EIP-55 checksum exists to catch a slip of one character. If a
-    /// mutated address still parses, a typo becomes an irreversible transfer.
+    /// A mutated address must be accepted exactly when EIP-55 says it is
+    /// valid, and rejected otherwise.
+    ///
+    /// This is the strongest true statement available. "Always rejected" is
+    /// false — see `some_single_character_slips_survive_the_checksum` — and
+    /// "usually rejected" would pass while a validator quietly accepted
+    /// everything. Agreeing with an independent implementation, in both
+    /// directions, catches both.
     #[test]
-    fn a_single_altered_character_is_rejected(
+    fn a_mutated_address_parses_exactly_when_its_checksum_is_valid(
         seed in prop::array::uniform20(any::<u8>()),
         position in 0usize..40,
         replacement in 0u8..16,
@@ -386,16 +470,20 @@ proptest! {
         mutated[position] = new_char;
         let candidate: String = mutated.into_iter().collect();
 
-        // A body that ends up all-one-case carries no checksum by definition.
+        // A body that ends up all-one-case carries no checksum by definition,
+        // and is accepted on its shape alone.
         let letters: Vec<char> = candidate.chars().filter(|c| c.is_ascii_alphabetic()).collect();
         let uniform = letters.is_empty()
             || letters.iter().all(|c| c.is_ascii_lowercase())
             || letters.iter().all(|c| c.is_ascii_uppercase());
         prop_assume!(!uniform);
 
-        prop_assert!(
-            Address::parse(&format!("0x{candidate}")).is_err(),
-            "changing position {position} of {checksummed} to `{new_char}` was accepted"
+        let valid = eip55(&candidate.to_ascii_lowercase()) == candidate;
+        prop_assert_eq!(
+            Address::parse(&format!("0x{candidate}")).is_ok(),
+            valid,
+            "changing position {} of {} to `{}`: EIP-55 says valid={}",
+            position, checksummed, new_char, valid
         );
     }
 

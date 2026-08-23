@@ -66,6 +66,15 @@ fn list(engine: &Engine, json: bool) -> Result<()> {
     Ok(())
 }
 
+/// Below this many bits of EIP-55 checksum, a typo is likely enough to
+/// survive that it is worth saying so out loud.
+///
+/// An EVM address averages fifteen hex letters and therefore fifteen bits.
+/// Twelve is the bottom of the ordinary range: under it, the odds of a slip
+/// parsing anyway pass one in four thousand, which is not a number to hold
+/// someone's payouts on without them knowing.
+const WEAK_CHECKSUM_BITS: u32 = 12;
+
 fn link(engine: &Engine, handle: &str, wallet: &str, emails: &[String], json: bool) -> Result<()> {
     // Validate before writing. The config rejects a bad address on load, so
     // skipping the check here would just move the failure somewhere less
@@ -122,11 +131,25 @@ fn link(engine: &Engine, handle: &str, wallet: &str, emails: &[String], json: bo
 
     write_document(path, &doc)?;
 
+    // Said once, here, because this is the only moment a human chooses an
+    // address. After this it is just a string the pipeline carries.
+    let bits = address.checksum_bits();
+    if bits < WEAK_CHECKSUM_BITS {
+        eprintln!(
+            "{} this address carries only {bits} bits of checksum, so roughly \
+             1 in {} single-character typos would still parse. Compare it \
+             against the wallet, character by character, before a round runs.",
+            ui::yellow("warning:"),
+            1u64 << bits
+        );
+    }
+
     if json {
         return crate::cli::commands::print_json(&serde_json::json!({
             "handle": handle,
             "wallet": wallet,
             "emails": emails,
+            "checksum_bits": bits,
         }));
     }
     println!(

@@ -69,11 +69,12 @@ The test suite runs in five layers:
 | CLI | exit codes and the `--json` shape that `action.yml` parses |
 
 `tests/adversarial.rs` is the one to read first. It asks whether Dedalo can
-be made to compute a *wrong* answer: whether two different
-plans can share an id, whether one account spelled two ways can be paid twice,
-whether a plan id can steer a filesystem path, whether a mistyped address
-survives its checksum. Each test marked `FOUND:` is a regression test for a
-defect that was real here, not a hypothetical.
+be made to compute a *wrong* answer: whether two different plans can share an
+id, whether one account spelled two ways can be paid twice, whether a plan id
+can steer a filesystem path, whether a mistyped address survives its
+checksum. Each test marked `FOUND:` is a regression test for a defect that
+was real here, not a hypothetical — including one where the defect turned out
+to be the claim in this README rather than the code.
 
 ### Design guarantees
 
@@ -87,9 +88,12 @@ defect that was real here, not a hypothetical.
   in the protocol's pocket.
 - **One wallet, one transfer.** Addresses are compared case-insensitively, so
   the two EIP-55 spellings of one account are one payee, not two.
-- **Addresses are validated before they are written down.** A mixed-case
-  address is checked against its EIP-55 checksum, which catches essentially
-  every single-character typo — before it becomes an irreversible transfer.
+- **Addresses are validated before they are written down**, and the strength
+  of that check is stated rather than assumed. EIP-55 hides its checksum in
+  the capitalisation of the hex *letters*, so an address carries one bit per
+  character in `a-f` — fifteen on average, sometimes seven. `identity link`
+  reports the number and warns when it is low, because the remaining risk
+  belongs to whoever pasted the address, not to the validator.
 - **Unpayable contributors are reported, not hidden.** Someone who earned a
   share but has no wallet on file shows up in the plan's `unresolved` list.
 - **Idempotent rounds.** The ledger refuses to settle the same plan twice, and

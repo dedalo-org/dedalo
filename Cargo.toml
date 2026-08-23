@@ -76,6 +76,9 @@ dedalo = { path = ".", features = ["testing"] }
 assert_cmd = "2"
 predicates = "3"
 proptest = "1"
+# The adversarial suite implements EIP-55 a second time, so the property
+# compares this crate against the specification rather than against itself.
+sha3 = "0.10"
 tempfile = "3"
 
 [package.metadata.docs.rs]
