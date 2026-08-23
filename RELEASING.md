@@ -1,8 +1,8 @@
 # Releasing Dedalo
 
-A release is one version number, one tag, and one set of artifacts. Both crates
-in the workspace share that version, so `v0.4.0` means `dedalo` **and**
-`dedalo-core` are at `0.4.0`.
+A release is one version number, one tag, and one set of artifacts. The
+library and the binary are one crate, so `v0.4.0` means exactly one thing:
+`dedalo` is at `0.4.0` on crates.io, and the tagged commit built it.
 
 Nothing here requires a maintainer to run commands locally: the whole flow is
 two workflow runs and one pull request review.
@@ -49,7 +49,7 @@ refactor(git): move trailer parsing behind the backend trait
 
 1. **Open the release pull request.** Run the **Version** workflow from the
    Actions tab and pick `patch`, `minor`, `major`, or an explicit version. It
-   bumps the workspace version, refreshes `Cargo.lock`, prepends the generated
+   bumps the crate version, refreshes `Cargo.lock`, prepends the generated
    changelog section, and opens a pull request labelled `release`.
 
 2. **Review it.** Read the changelog diff as a user would: does it describe
@@ -72,7 +72,7 @@ refactor(git): move trailer parsing behind the backend trait
    - builds binaries for five targets with SHA-256 checksums;
    - attaches signed build provenance to every archive;
    - publishes a GitHub release with the changelog section as its notes;
-   - publishes `dedalo-core` then `dedalo` to crates.io;
+   - publishes `dedalo` to crates.io;
 
 If step 4 fails after the tag exists, fix forward: delete the tag, merge the
 fix, and re-run **Tag**. Never move a tag that a release already published.

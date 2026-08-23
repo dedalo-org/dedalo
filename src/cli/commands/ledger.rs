@@ -1,11 +1,11 @@
 //! `dedalo ledger` — the append-only history of what Dedalo did.
 
+use crate::Engine;
+use crate::ledger::LedgerEntry;
 use anyhow::Result;
-use dedalo_core::Engine;
-use dedalo_core::ledger::LedgerEntry;
 
-use crate::cli::LedgerArgs;
-use crate::ui::{self, Align, Table};
+use crate::cli::args::LedgerArgs;
+use crate::cli::ui::{self, Align, Table};
 
 pub fn run(engine: &Engine, args: &LedgerArgs, json: bool) -> Result<()> {
     let mut entries = engine.ledger().entries()?;
@@ -13,7 +13,7 @@ pub fn run(engine: &Engine, args: &LedgerArgs, json: bool) -> Result<()> {
     entries.drain(..skip);
 
     if json {
-        return crate::commands::print_json(&entries);
+        return crate::cli::commands::print_json(&entries);
     }
 
     if entries.is_empty() {

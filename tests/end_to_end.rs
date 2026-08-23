@@ -3,17 +3,17 @@
 //! The unit tests cover the arithmetic; this one covers the part that can
 //! only break against the actual `git` binary: reading merges, attributing
 //! them, and turning them into a settled round. The repository harness lives
-//! in `dedalo_core::testing`, so downstream crates can use the same one.
+//! in `dedalo::testing`, so downstream crates can use the same one.
 
-use dedalo_core::config::Config;
-use dedalo_core::git::{CliGit, GitBackend, HistoryQuery};
-use dedalo_core::identity::Identity;
-use dedalo_core::ledger::Ledger;
-use dedalo_core::money::Amount;
-use dedalo_core::settlement::DryRunSettlement;
-use dedalo_core::testing::TempRepo;
-use dedalo_core::wallet::Address;
-use dedalo_core::{Engine, payout::PayeeKind};
+use dedalo::config::Config;
+use dedalo::git::{CliGit, GitBackend, HistoryQuery};
+use dedalo::identity::Identity;
+use dedalo::ledger::Ledger;
+use dedalo::money::Amount;
+use dedalo::settlement::DryRunSettlement;
+use dedalo::testing::TempRepo;
+use dedalo::wallet::Address;
+use dedalo::{Engine, payout::PayeeKind};
 
 fn config_for(repo: &TempRepo) -> Config {
     let mut config = Config::template("demo");

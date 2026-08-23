@@ -249,7 +249,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          cargo semver-checks --baseline-rev "$BASE" --package dedalo-core \
+          cargo semver-checks --baseline-rev "$BASE" --package dedalo \
             2>&1 | tee "$RUNNER_TEMP/semver.txt"
           {
             echo '### Public API'

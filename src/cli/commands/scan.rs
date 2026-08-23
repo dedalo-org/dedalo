@@ -1,10 +1,10 @@
 //! `dedalo scan` and `dedalo contributors` — read-only views of pending work.
 
+use crate::Engine;
 use anyhow::Result;
-use dedalo_core::Engine;
 
-use crate::cli::RangeArgs;
-use crate::ui::{self, Align, Table};
+use crate::cli::args::RangeArgs;
+use crate::cli::ui::{self, Align, Table};
 
 pub fn scan(engine: &Engine, args: &RangeArgs, json: bool) -> Result<()> {
     let mut merges = engine.scan(args.since.as_deref())?;
@@ -15,7 +15,7 @@ pub fn scan(engine: &Engine, args: &RangeArgs, json: bool) -> Result<()> {
     }
 
     if json {
-        return crate::commands::print_json(&merges);
+        return crate::cli::commands::print_json(&merges);
     }
 
     if merges.is_empty() {
@@ -60,7 +60,7 @@ pub fn contributors(engine: &Engine, args: &RangeArgs, json: bool) -> Result<()>
     let attribution = engine.attribute(&merges);
 
     if json {
-        return crate::commands::print_json(&attribution);
+        return crate::cli::commands::print_json(&attribution);
     }
 
     if attribution.is_empty() {

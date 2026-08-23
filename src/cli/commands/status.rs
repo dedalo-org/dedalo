@@ -1,11 +1,11 @@
 //! `dedalo status` — where the project's funding stands right now.
 
+use crate::Engine;
 use anyhow::Result;
-use dedalo_core::Engine;
 use serde_json::json;
 
-use crate::commands::display_path;
-use crate::ui;
+use crate::cli::commands::display_path;
+use crate::cli::ui;
 
 pub fn run(engine: &Engine, json: bool) -> Result<()> {
     let config = engine.config();
@@ -15,7 +15,7 @@ pub fn run(engine: &Engine, json: bool) -> Result<()> {
     let asset = &config.asset;
 
     if json {
-        return crate::commands::print_json(&json!({
+        return crate::cli::commands::print_json(&json!({
             "project": config.project.name,
             "branch": config.git.branch,
             "asset": asset,

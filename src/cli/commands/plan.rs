@@ -1,13 +1,13 @@
 //! `dedalo plan` — price a funding round without spending anything.
 
+use crate::money::Amount;
+use crate::payout::{PayeeKind, PayoutPlan, UnresolvedReason};
+use crate::{Engine, git::MergeEvent};
 use anyhow::{Context, Result};
-use dedalo_core::money::Amount;
-use dedalo_core::payout::{PayeeKind, PayoutPlan, UnresolvedReason};
-use dedalo_core::{Engine, git::MergeEvent};
 
-use crate::cli::{PlanArgs, RangeArgs};
-use crate::commands::display_path;
-use crate::ui::{self, Align, Table};
+use crate::cli::args::{PlanArgs, RangeArgs};
+use crate::cli::commands::display_path;
+use crate::cli::ui::{self, Align, Table};
 
 /// Build a plan from the pending range. Shared with `dedalo settle`.
 pub fn build(
@@ -41,7 +41,7 @@ pub fn run(engine: &Engine, args: &PlanArgs, json: bool) -> Result<()> {
     }
 
     if json {
-        return crate::commands::print_json(&plan);
+        return crate::cli::commands::print_json(&plan);
     }
 
     print_plan(engine, &plan);
@@ -100,9 +100,7 @@ pub fn print_plan(engine: &Engine, plan: &PayoutPlan) {
         .sum();
     println!(
         "  contributors  {:>16} {}",
-        asset.format_amount(dedalo_core::money::Amount::from_base_units(
-            contributors_total
-        )),
+        asset.format_amount(crate::money::Amount::from_base_units(contributors_total)),
         asset.symbol
     );
     println!(

@@ -5,14 +5,14 @@
 
 use std::path::Path;
 
+use crate::Engine;
+use crate::wallet::Address;
 use anyhow::{Context, Result, bail};
-use dedalo_core::Engine;
-use dedalo_core::wallet::Address;
 use toml_edit::{Array, DocumentMut, Item, Table, value};
 
-use crate::cli::{IdentityCommand, RangeArgs};
-use crate::commands::display_path;
-use crate::ui::{self, Align, Table as OutTable};
+use crate::cli::args::{IdentityCommand, RangeArgs};
+use crate::cli::commands::display_path;
+use crate::cli::ui::{self, Align, Table as OutTable};
 
 pub fn run(engine: &Engine, command: &IdentityCommand, json: bool) -> Result<()> {
     match command {
@@ -30,7 +30,7 @@ pub fn run(engine: &Engine, command: &IdentityCommand, json: bool) -> Result<()>
 fn list(engine: &Engine, json: bool) -> Result<()> {
     let identities = &engine.config().identities;
     if json {
-        return crate::commands::print_json(identities);
+        return crate::cli::commands::print_json(identities);
     }
     if identities.is_empty() {
         println!(
@@ -65,6 +65,15 @@ fn list(engine: &Engine, json: bool) -> Result<()> {
     print!("{}", table.render());
     Ok(())
 }
+
+/// Below this many bits of EIP-55 checksum, a typo is likely enough to
+/// survive that it is worth saying so out loud.
+///
+/// An EVM address averages fifteen hex letters and therefore fifteen bits.
+/// Twelve is the bottom of the ordinary range: under it, the odds of a slip
+/// parsing anyway pass one in four thousand, which is not a number to hold
+/// someone's payouts on without them knowing.
+const WEAK_CHECKSUM_BITS: u32 = 12;
 
 fn link(engine: &Engine, handle: &str, wallet: &str, emails: &[String], json: bool) -> Result<()> {
     // Validate before writing. The config rejects a bad address on load, so
@@ -122,11 +131,25 @@ fn link(engine: &Engine, handle: &str, wallet: &str, emails: &[String], json: bo
 
     write_document(path, &doc)?;
 
+    // Said once, here, because this is the only moment a human chooses an
+    // address. After this it is just a string the pipeline carries.
+    let bits = address.checksum_bits();
+    if bits < WEAK_CHECKSUM_BITS {
+        eprintln!(
+            "{} this address carries only {bits} bits of checksum, so roughly \
+             1 in {} single-character typos would still parse. Compare it \
+             against the wallet, character by character, before a round runs.",
+            ui::yellow("warning:"),
+            1u64 << bits
+        );
+    }
+
     if json {
-        return crate::commands::print_json(&serde_json::json!({
+        return crate::cli::commands::print_json(&serde_json::json!({
             "handle": handle,
             "wallet": wallet,
             "emails": emails,
+            "checksum_bits": bits,
         }));
     }
     println!(
@@ -151,7 +174,7 @@ fn remove(engine: &Engine, handle: &str, json: bool) -> Result<()> {
     write_document(path, &doc)?;
 
     if json {
-        return crate::commands::print_json(&serde_json::json!({ "removed": handle }));
+        return crate::cli::commands::print_json(&serde_json::json!({ "removed": handle }));
     }
     println!("{} {handle}", ui::green("removed"));
     Ok(())
@@ -172,7 +195,7 @@ fn missing(engine: &Engine, range: &RangeArgs, json: bool) -> Result<()> {
         .collect();
 
     if json {
-        return crate::commands::print_json(&unlinked);
+        return crate::cli::commands::print_json(&unlinked);
     }
     if unlinked.is_empty() {
         println!("{}", ui::green("every pending contributor has a wallet"));

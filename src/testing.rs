@@ -8,11 +8,11 @@
 //!
 //! ```toml
 //! [dev-dependencies]
-//! dedalo-core = { version = "0.1", features = ["testing"] }
+//! dedalo = { version = "0.1", features = ["testing"] }
 //! ```
 //!
 //! ```no_run
-//! use dedalo_core::testing::TempRepo;
+//! use dedalo::testing::TempRepo;
 //!
 //! let repo = TempRepo::new("example");
 //! repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 40);
@@ -86,7 +86,7 @@ impl TempRepo {
             .env("GIT_COMMITTER_EMAIL", "maint@example.com")
             .env("GIT_CONFIG_NOSYSTEM", "1")
             .output()
-            .expect("git must be installed to use dedalo_core::testing");
+            .expect("git must be installed to use crate::testing");
         assert!(
             output.status.success(),
             "git {args:?} failed: {}",
@@ -115,7 +115,7 @@ impl TempRepo {
             .env("GIT_COMMITTER_EMAIL", "maint@example.com")
             .env("GIT_CONFIG_NOSYSTEM", "1")
             .output()
-            .expect("git must be installed to use dedalo_core::testing");
+            .expect("git must be installed to use crate::testing");
         assert!(
             output.status.success(),
             "commit failed: {}",

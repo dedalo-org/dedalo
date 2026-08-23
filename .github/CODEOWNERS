@@ -3,15 +3,15 @@
 
 # Code that decides how much money moves. Review these lines as if funds
 # depended on them, because they do.
-/crates/dedalo-core/src/money.rs        @4137314
-/crates/dedalo-core/src/treasury.rs     @4137314
-/crates/dedalo-core/src/payout.rs       @4137314
-/crates/dedalo-core/src/settlement/     @4137314
-/crates/dedalo-core/src/ledger.rs       @4137314
+/src/money.rs                       @4137314
+/src/treasury.rs                    @4137314
+/src/payout.rs                      @4137314
+/src/wallet.rs                      @4137314
+/src/settlement/                    @4137314
+/src/ledger.rs                      @4137314
 
 # Anything that can publish, sign, or ship a binary.
 /.github/workflows/                 @4137314
-/release-plz.toml                   @4137314
 /action.yml                         @4137314
 /install.sh                         @4137314
 /SECURITY.md                        @4137314

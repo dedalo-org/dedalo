@@ -53,12 +53,12 @@ whose id changed is a plan someone tampered with.
 
 ### How this is verified
 
-Not claims — gates. CI runs them on every pull request: workspace build and
-tests on Linux, macOS and Windows, clippy with `-D warnings`, rustfmt, the
-declared MSRV built with exactly the compiler `rust-version` promises, rustdoc,
+Not claims — gates. CI runs them on every pull request: build and tests on
+Linux, macOS and Windows, clippy with `-D warnings`, rustfmt, the declared
+MSRV built with exactly the compiler `rust-version` promises, rustdoc,
 coverage, packaging, and public-API compatibility.
 
-The test suite is 66 tests in four layers:
+The test suite runs in five layers:
 
 | Layer | What it holds down |
 | --- | --- |
@@ -68,12 +68,13 @@ The test suite is 66 tests in four layers:
 | end-to-end | the library against real repositories with real merge commits |
 | CLI | exit codes and the `--json` shape that `action.yml` parses |
 
-`crates/dedalo-core/tests/adversarial.rs` is the one to read first. It asks
-whether Dedalo can be made to compute a *wrong* answer: whether two different
-plans can share an id, whether one account spelled two ways can be paid twice,
-whether a plan id can steer a filesystem path, whether a mistyped address
-survives its checksum. Each test marked `FOUND:` is a regression test for a
-defect that was real here, not a hypothetical.
+`tests/adversarial.rs` is the one to read first. It asks whether Dedalo can
+be made to compute a *wrong* answer: whether two different plans can share an
+id, whether one account spelled two ways can be paid twice, whether a plan id
+can steer a filesystem path, whether a mistyped address survives its
+checksum. Each test marked `FOUND:` is a regression test for a defect that
+was real here, not a hypothetical — including one where the defect turned out
+to be the claim in this README rather than the code.
 
 ### Design guarantees
 
@@ -87,9 +88,12 @@ defect that was real here, not a hypothetical.
   in the protocol's pocket.
 - **One wallet, one transfer.** Addresses are compared case-insensitively, so
   the two EIP-55 spellings of one account are one payee, not two.
-- **Addresses are validated before they are written down.** A mixed-case
-  address is checked against its EIP-55 checksum, which catches essentially
-  every single-character typo — before it becomes an irreversible transfer.
+- **Addresses are validated before they are written down**, and the strength
+  of that check is stated rather than assumed. EIP-55 hides its checksum in
+  the capitalisation of the hex *letters*, so an address carries one bit per
+  character in `a-f` — fifteen on average, sometimes seven. `identity link`
+  reports the number and warns when it is low, because the remaining risk
+  belongs to whoever pasted the address, not to the validator.
 - **Unpayable contributors are reported, not hidden.** Someone who earned a
   share but has no wallet on file shows up in the plan's `unresolved` list.
 - **Idempotent rounds.** The ledger refuses to settle the same plan twice, and
@@ -216,11 +220,18 @@ history has been paid out.
 
 ## Using the library
 
-The CLI is a thin shell over [`dedalo-core`](crates/dedalo-core), which is
-usable on its own — in a bot, a GitHub App, or your own dashboard.
+The binary is a thin shell over the library in the same crate, which is
+usable on its own — in a bot, a GitHub App, or your own dashboard. Turning the
+default features off leaves the pipeline without the argument parser or the
+async runtime the CLI needs:
+
+```toml
+[dependencies]
+dedalo = { version = "0.1", default-features = false }
+```
 
 ```rust
-use dedalo_core::{Engine, money::Amount};
+use dedalo::{Engine, money::Amount};
 
 let engine = Engine::discover(".")?;
 let merges = engine.scan(None)?;                 // unpaid merges
@@ -281,15 +292,15 @@ enter the repository, so the toolchain is the same one CI uses:
 cargo test --workspace --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all
-cargo doc --workspace --no-deps --open
-cargo run -p dedalo -- --help
+cargo doc --no-deps --open
+cargo run -- --help
 ```
 
-Building on the library? `dedalo-core`'s `testing` feature gives you throwaway
+Building on the library? The `testing` feature gives you throwaway
 repositories with real merge history:
 
 ```rust
-use dedalo_core::testing::TempRepo;
+use dedalo::testing::TempRepo;
 
 let repo = TempRepo::new("example");
 repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 40);
@@ -301,22 +312,22 @@ repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 40);
 | --- | --- |
 | Pinned toolchain | `rust-toolchain.toml`, picked up by `rustup` on entry |
 | CI | `.github/workflows/ci.yml` — fmt, clippy, tests on Linux/macOS/Windows, MSRV, rustdoc, coverage, packaging, public-API compatibility |
-| MSRV | verified, not asserted: CI builds the workspace with exactly the compiler `rust-version` promises |
+| MSRV | verified, not asserted: CI builds with exactly the compiler `rust-version` promises |
 | Workflow safety | every third-party action pinned to a commit, with the tag as a trailing comment |
 | Artifact integrity | SHA-256 checksums plus signed build provenance (`gh attestation verify`) |
 | API docs | `.github/workflows/docs.yml` — rustdoc published to GitHub Pages on every push to `main` |
 | Releases | `.github/workflows/release.yml` — tagged builds for five targets, checksums, GitHub release, crates.io |
 | Supply chain | `.github/workflows/security.yml` — `cargo-deny` and `cargo-audit`, weekly and on manifest changes |
 | Dependencies | Dependabot, grouped weekly PRs for Cargo and Actions |
-| Versioning | one version and one tag for the whole workspace, bumped by a reviewable release pull request — see [RELEASING.md](RELEASING.md) |
+| Versioning | one version and one tag, bumped by a reviewable release pull request — see [RELEASING.md](RELEASING.md) |
 | Changelog | generated from Conventional Commit subjects with `git-cliff`; the release notes and `CHANGELOG.md` are the same text |
 | Distribution | install script, `cargo install`, `cargo binstall`, GitHub Action |
 | Branch policy | `.github/rulesets/main.json`, importable in Settings → Rules |
 | Site | `site/` published to GitHub Pages with the API reference under `/api/` |
 
-Public items in `dedalo-core` must be documented: the crate sets
-`#![warn(missing_docs)]` and CI builds rustdoc with `-D warnings`, so the
-published API reference cannot drift out of date.
+Public items must be documented: the crate sets `#![warn(missing_docs)]`
+and CI builds rustdoc with `-D warnings`, so the published API reference
+cannot drift out of date.
 
 ## Contributing
 
@@ -324,10 +335,10 @@ Dedalo is open source and built by the community. If you care about Rust,
 developer tooling, and sustainable open-source economics, contributions are
 welcome — and, fittingly, they are what the project pays out for.
 
-Start with [CONTRIBUTING.md](CONTRIBUTING.md); `crates/dedalo-core/src/lib.rs`
-documents the pipeline end to end and is the clearest map of the architecture.
-The invariants the code guarantees are stated and enforced in
-`crates/dedalo-core/tests/properties.rs`.
+Start with [CONTRIBUTING.md](CONTRIBUTING.md); `src/lib.rs` documents the
+pipeline end to end and is the clearest map of the architecture. The
+invariants the code guarantees are stated and enforced in
+`tests/properties.rs` and `tests/adversarial.rs`.
 Security issues go through [SECURITY.md](SECURITY.md), never a public issue.
 
 ## License

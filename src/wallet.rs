@@ -32,8 +32,13 @@
 //!    checksum in the capitalisation of the hex digits, so one EVM account is
 //!    routinely written two ways. Comparing the strings byte-for-byte made a
 //!    contributor with two spellings receive two transfers.
-//! 2. **A mistyped address must be rejected.** The EIP-55 checksum catches
-//!    essentially every single-character slip.
+//! 2. **A mistyped address is usually, not always, rejected.** EIP-55 carries
+//!    its checksum in the capitalisation of the *letters* only, so an address
+//!    is protected by as many bits as it has characters in `a-f` — around 15
+//!    on average, but as few as a handful. A slip that lands on another valid
+//!    spelling is accepted, and no amount of care in this module changes
+//!    that: it is the strength of the checksum, not of the implementation.
+//!    [`Address::checksum_bits`] reports it so a caller can say so out loud.
 //!
 //! [EIP-55]: https://eips.ethereum.org/EIPS/eip-55
 
@@ -121,6 +126,30 @@ impl Address {
     /// [EIP-55]: https://eips.ethereum.org/EIPS/eip-55
     pub fn as_str(&self) -> &str {
         &self.canonical
+    }
+
+    /// How many bits of checksum protect this address against a typo.
+    ///
+    /// [EIP-55] encodes its checksum in the capitalisation of the hex
+    /// letters, so digits carry none: an address is guarded by one bit per
+    /// character in `a-f`. A random single-character slip therefore survives
+    /// with probability `2^-bits` — negligible at 20 bits, and roughly one in
+    /// a hundred at 7.
+    ///
+    /// Report it wherever a user commits an address for the first time. The
+    /// number is a property of the address, not of the person typing it, and
+    /// there is nothing to be done about a low one except check it twice.
+    ///
+    /// [EIP-55]: https://eips.ethereum.org/EIPS/eip-55
+    pub fn checksum_bits(&self) -> u32 {
+        match self.kind {
+            // The body only: the `x` of the `0x` prefix is not a hex digit
+            // and carries no checksum bit.
+            AddressKind::Evm => self.canonical[2..]
+                .chars()
+                .filter(char::is_ascii_alphabetic)
+                .count() as u32,
+        }
     }
 
     /// The form two addresses are compared by, following the chain's rules.
@@ -333,6 +362,26 @@ mod tests {
         "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
         "0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb",
     ];
+
+    #[test]
+    fn checksum_bits_counts_hex_letters_and_not_the_prefix() {
+        // FOUND: the first version counted over the whole canonical string,
+        // so the `x` of `0x` was scored as a checksum bit that does not exist.
+        for address in EIP55 {
+            let parsed = Address::parse(address).unwrap();
+            let expected = address[2..]
+                .chars()
+                .filter(char::is_ascii_alphabetic)
+                .count() as u32;
+            assert_eq!(parsed.checksum_bits(), expected, "{address}");
+            assert!(parsed.checksum_bits() <= 40);
+        }
+
+        // An address of digits only has no checksum at all: every spelling of
+        // it is "correctly" capitalised, because there is nothing to capitalise.
+        let digits = Address::parse("0x1234567890123456789012345678901234567890").unwrap();
+        assert_eq!(digits.checksum_bits(), 0);
+    }
 
     #[test]
     fn reproduces_the_eip55_vectors() {

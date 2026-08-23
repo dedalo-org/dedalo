@@ -6,8 +6,8 @@ pub mod scan;
 pub mod settle;
 pub mod status;
 
+use crate::Engine;
 use anyhow::{Context, Result};
-use dedalo_core::Engine;
 use std::path::{Path, PathBuf};
 
 /// Open the engine for the repository the user pointed at.

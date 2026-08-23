@@ -1,4 +1,4 @@
-//! # Dedalo core
+//! # Dedalo
 //!
 //! Turns merges that are already in a git repository into a deterministic,
 //! auditable payout plan, and settles that plan on chain.
@@ -16,7 +16,7 @@
 //! same `dedalo.toml` always yield the same plan id, on any machine.
 //!
 //! ```no_run
-//! use dedalo_core::{Engine, money::Amount};
+//! use dedalo::{Engine, money::Amount};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let engine = Engine::discover(".")?;
@@ -35,6 +35,10 @@
 #![warn(rustdoc::broken_intra_doc_links)]
 
 pub mod attribution;
+
+#[cfg(feature = "cli")]
+pub mod cli;
+
 pub mod config;
 /// Error and result types shared by every stage.
 pub mod error;
