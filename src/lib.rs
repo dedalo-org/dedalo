@@ -48,6 +48,7 @@ pub mod ledger;
 pub mod money;
 pub mod payout;
 pub mod settlement;
+pub mod store;
 
 #[cfg(feature = "testing")]
 pub mod testing;

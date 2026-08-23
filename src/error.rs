@@ -95,6 +95,18 @@ pub enum Error {
         reason: String,
     },
 
+    /// The ledger chain does not hash to what it claims.
+    ///
+    /// This is not a parse failure: it means the record was changed after it
+    /// was written, or that an entry it points at is missing.
+    #[error("ledger is corrupt at {id}: {reason}")]
+    LedgerCorrupt {
+        /// Id of the entry the walk stopped at.
+        id: String,
+        /// What did not add up.
+        reason: String,
+    },
+
     /// The requested capability exists in the API but is not live yet.
     #[error("{feature} is not implemented yet in this release: {hint}")]
     NotImplemented {

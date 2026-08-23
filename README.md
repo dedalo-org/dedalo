@@ -214,9 +214,48 @@ wallet = "0x…"
 emails = ["ada@example.com"]
 ```
 
-Dedalo keeps its state in `.dedalo/`: an append-only `ledger.jsonl`, the full
-JSON of every plan under `plans/`, and a `state.json` cursor recording how far
-history has been paid out.
+### The ledger is a hash chain
+
+`.dedalo/` is shaped like `.git`, because the problem is the same one: a
+record many people must be able to check, living in the project rather than on
+someone's server.
+
+```text
+.dedalo/
+├── HEAD                        ref: refs/ledger/main
+├── refs/ledger/main            the newest entry's id
+└── objects/de/dc6ddbbe….json   one file per entry and per plan
+```
+
+Every entry names its parent, and an entry's id is a hash over that parent
+plus its own contents:
+
+```text
+HEAD ─▶ dedc9f… ──parent──▶ dedc41… ──parent──▶ dedc07… (root)
+        settled            settled             plan-created
+```
+
+So editing an old entry changes its id; every entry after it named the old id,
+so their ids change too, and `HEAD` stops matching. **One value attests to the
+whole payout history.** An append-only file is append-only by convention;
+this is append-only by arithmetic.
+
+```console
+$ dedalo verify
+head dedc6ddbbef5415e6dcbf805b60affd83c49
+ok 4 entries hash to their recorded ids
+ok 2 settled plans present and self-consistent
+```
+
+`dedalo verify` reads only what is committed, touches no network and needs no
+key — so it is a check a contributor, an auditor or an investor can run on a
+clone, not something they have to take the maintainer's word for.
+
+Objects are plain JSON rather than compressed, on purpose: a round is meant to
+be reviewable in a pull request, and a zlib blob is not reviewable. And this
+lives in `.dedalo/` rather than `.git/` because it has to be committed — a CI
+job clones fresh, and a runner that cannot see past rounds would pay them
+again.
 
 ## Using the library
 

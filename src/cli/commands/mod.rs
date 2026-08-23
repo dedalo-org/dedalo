@@ -5,6 +5,7 @@ pub mod plan;
 pub mod scan;
 pub mod settle;
 pub mod status;
+pub mod verify;
 
 use crate::Engine;
 use anyhow::{Context, Result};

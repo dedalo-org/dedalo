@@ -8,6 +8,23 @@ use crate::cli::args::LedgerArgs;
 use crate::cli::ui::{self, Align, Table};
 
 pub fn run(engine: &Engine, args: &LedgerArgs, json: bool) -> Result<()> {
+    if args.migrate {
+        let converted = engine.ledger().migrate_legacy()?;
+        if json {
+            return crate::cli::commands::print_json(&serde_json::json!({ "migrated": converted }));
+        }
+        match converted {
+            0 => println!("{}", ui::dim("nothing to migrate")),
+            n => println!(
+                "{} {n} entr{} converted into the chain; the original is kept as \
+                 ledger.jsonl.migrated",
+                ui::green("migrated"),
+                if n == 1 { "y" } else { "ies" }
+            ),
+        }
+        return Ok(());
+    }
+
     let mut entries = engine.ledger().entries()?;
     let skip = entries.len().saturating_sub(args.limit);
     entries.drain(..skip);
