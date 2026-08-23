@@ -130,12 +130,21 @@ fn manifest() -> Manifest {
 
 /// Count occurrences of the money patterns, ignoring the module's own tests:
 /// a `#[cfg(test)]` block is not shipped and its arithmetic decides nothing.
+fn shipped_source(path: &Path) -> String {
+    // Normalised, because git hands out CRLF on Windows and the marker below
+    // would never match — every module's tests would then be counted as
+    // shipped arithmetic, and the manifest would be wrong on one platform only.
+    let source = std::fs::read_to_string(path)
+        .expect("a readable module")
+        .replace("\r\n", "\n");
+    match source.find("\n#[cfg(test)]\nmod tests {") {
+        Some(index) => source[..index].to_string(),
+        None => source,
+    }
+}
+
 fn arithmetic_sites(path: &Path) -> usize {
-    let source = std::fs::read_to_string(path).expect("a readable module");
-    let body = match source.find("\n#[cfg(test)]\nmod tests {") {
-        Some(index) => &source[..index],
-        None => &source[..],
-    };
+    let body = shipped_source(path);
     body.lines()
         .filter(|line| {
             let trimmed = line.trim_start();
@@ -145,11 +154,7 @@ fn arithmetic_sites(path: &Path) -> usize {
 }
 
 fn builds_addresses(path: &Path) -> bool {
-    let source = std::fs::read_to_string(path).expect("a readable module");
-    let body = match source.find("\n#[cfg(test)]\nmod tests {") {
-        Some(index) => &source[..index],
-        None => &source[..],
-    };
+    let body = shipped_source(path);
     body.lines().any(|line| {
         let trimmed = line.trim_start();
         !trimmed.starts_with("//")
@@ -172,13 +177,17 @@ fn harnesses_on_disk() -> BTreeSet<String> {
             .expect("a file stem")
             .to_string_lossy()
             .to_string();
-        let source = std::fs::read_to_string(&path).expect("a readable test file");
+        let source = std::fs::read_to_string(&path)
+            .expect("a readable test file")
+            .replace("\r\n", "\n");
         for line in source.lines() {
             let trimmed = line.trim_start();
-            if let Some(rest) = trimmed.strip_prefix("fn ")
-                && let Some(name) = rest.split(['(', '<']).next()
-            {
-                found.insert(format!("{stem}::{name}"));
+            // Nested rather than a `let` chain: those are stable from 1.88
+            // and this crate's MSRV is 1.85, which CI builds with exactly.
+            if let Some(rest) = trimmed.strip_prefix("fn ") {
+                if let Some(name) = rest.split(['(', '<']).next() {
+                    found.insert(format!("{stem}::{name}"));
+                }
             }
         }
     }
