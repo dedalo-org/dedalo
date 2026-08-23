@@ -77,7 +77,6 @@ about, so it is written down per module in
 | Method | What passing means |
 | --- | --- |
 | **exhaustive** | Every value in a complete finite domain was tried. No counterexample exists in that domain. |
-| **smt** | A solver discharged the conditions. `solc --model-checker-engine bmc` over the contract, from an arbitrary starting state. |
 | property | Thousands of generated samples. **Not a proof** — a rare counterexample can survive, and one did. |
 | tests | Hand-picked cases. |
 | exempt | The module decides neither how much money moves nor where it goes. |
@@ -93,9 +92,20 @@ What is exhaustively proved today:
   shares conserve the total, a zero weight is never paid, a larger weight never
   receives less;
 - **every tree shape to 64 claims** — each claim proves against its own root,
-  and against no other claim's proof;
-- **the contract** — all ten arithmetic and assertion conditions in
-  `DedaloClaim.sol`, discharged by solc's model checker.
+  and against no other claim's proof.
+
+The vault — the rules a deployed contract enforces, and the one part of this
+system that cannot be patched after it ships — is ordinary Rust in
+`src/chain/vault`, with thirteen tests: one per way it must refuse. `Refusal`
+is the specification, and a test asserts no two refusals share a sentence.
+
+The **methods table has no `smt` row any more**, and that is a loss worth
+naming. The previous vault was Solidity, and `solc --model-checker-engine bmc`
+discharged all ten of its arithmetic conditions with a solver. Rust has no
+equivalent that terminates on this codebase — Kani was measured and rejected
+— so those conditions are now covered by tests rather than proved. What was
+gained is that the rules are in the same language as everything else, tested
+with the same machinery, and read without a second toolchain.
 
 The gate is `tests/verification_manifest.rs`, and it is the part that keeps
 the table above from becoming decoration. It fails the build when a module
@@ -286,13 +296,17 @@ Three things this buys, each of which was a hole in the obvious design:
 - **A key in CI cannot drain the treasury**, because there is no key in CI.
   Everything with write access to a workflow would have been able to reach it.
 
-The contract is [`contracts/src/DedaloClaim.sol`]. Its test suite is pinned to
-a Merkle root and five proofs produced by the Rust implementation, so the two
-independent implementations of the leaf encoding check each other. It is
-**unaudited and undeployed** — [How funds move](docs/settlement-architecture.md)
-lists what has to exist before it holds anything real.
+The vault is Rust. The rules live in [`src/chain/vault`](src/chain/vault),
+where they are pure — no storage, no clock, no caller — and therefore testable
+over their whole domain rather than by deploying them somewhere and poking
+them. The deployable at [`src/chain/contract`](src/chain/contract) is an
+[Arbitrum Stylus](https://arbitrum.io/stylus) crate that compiles to
+WebAssembly, and is deliberately thin: reading storage, moving a token, and
+knowing the time. A reader checking whether it is correct should end up in
+`vault`.
 
-[`contracts/src/DedaloClaim.sol`]: contracts/src/DedaloClaim.sol
+It is **unaudited and undeployed** — [How funds move](docs/settlement-architecture.md)
+lists what has to exist before it holds anything real.
 
 ### The ledger is a hash chain
 

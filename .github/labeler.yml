@@ -26,7 +26,7 @@
           - src/ledger.rs
           - src/store.rs
           - src/merkle.rs
-          - contracts/**
+          - src/chain/**
 
 "area: cli":
   - changed-files:

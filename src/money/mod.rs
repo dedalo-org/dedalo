@@ -4,6 +4,11 @@
 //! USDC micro-units, ...). Floating point never touches a balance: a payout
 //! plan must be reproducible bit-for-bit by anyone auditing the ledger.
 
+#[cfg(test)]
+mod proofs;
+
+pub mod treasury;
+
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};

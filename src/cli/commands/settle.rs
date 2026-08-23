@@ -3,7 +3,7 @@
 //! Simulation is the default. Real money only moves behind `--execute`, and
 //! only through the backend configured in `dedalo.toml`.
 
-use crate::settlement::{DryRunSettlement, backend_from_config};
+use crate::chain::settlement::{DryRunSettlement, backend_from_config};
 use crate::{Engine, SettlementOptions};
 use anyhow::{Context, Result};
 

@@ -5,15 +5,18 @@
 //! it — range, policy, fees, and the resulting line items. Settling a plan
 //! elsewhere with a different id means someone changed the numbers.
 
+#[cfg(test)]
+mod proofs;
+
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::attribution::Attribution;
+use crate::chain::wallet::Address;
 use crate::config::Config;
 use crate::error::{Error, Result};
+use crate::money::treasury::TreasurySplit;
 use crate::money::{Amount, Asset};
-use crate::treasury::TreasurySplit;
-use crate::wallet::Address;
 
 /// Why a given address is receiving money.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -422,8 +425,8 @@ pub fn now_unix() -> i64 {
 mod tests {
     use super::*;
     use crate::attribution::Contribution;
+    use crate::attribution::identity::Identity;
     use crate::git::Author;
-    use crate::identity::Identity;
 
     fn contribution(email: &str, score: u128) -> Contribution {
         Contribution {

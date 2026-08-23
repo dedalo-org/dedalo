@@ -8,16 +8,16 @@
 //! Each one that carries a `FOUND:` note is a regression test for a defect
 //! that was real in this codebase, not a hypothetical.
 
+use dedalo::attribution::identity::Identity;
 use dedalo::attribution::{Attribution, AttributionPolicy, Contribution};
+use dedalo::chain::settlement::DryRunSettlement;
+use dedalo::chain::wallet::{Address, ZERO_ADDRESS};
 use dedalo::config::Config;
 use dedalo::git::{Author, DiffStat, MergeEvent, MergedCommit};
-use dedalo::identity::Identity;
-use dedalo::ledger::Ledger;
 use dedalo::money::{Amount, Asset};
 use dedalo::payout::{PayeeKind, PayoutPlan, PlanBuilder, PlanRange};
-use dedalo::settlement::DryRunSettlement;
+use dedalo::storage::ledger::Ledger;
 use dedalo::testing::TempRepo;
-use dedalo::wallet::{Address, ZERO_ADDRESS};
 use dedalo::{Engine, SettlementOptions};
 use proptest::prelude::*;
 use sha3::{Digest, Keccak256};

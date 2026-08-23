@@ -1,3 +1,9 @@
+//! Error and result types shared by every stage.
+//!
+//! One enum for the whole crate rather than one per module: a caller that has
+//! to match on four unrelated error types to find out whether a round can
+//! proceed will match on none of them.
+
 use std::path::PathBuf;
 
 /// Result alias used across the whole core crate.

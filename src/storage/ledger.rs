@@ -17,7 +17,7 @@
 //! [`Ledger::verify`] is what checks it. Publish `HEAD` and anyone with a
 //! clone can confirm that what they are reading is what was written.
 //!
-//! Entries live in the object store described in [`crate::store`], as plain
+//! Entries live in the object store described in [`crate::storage::objects`], as plain
 //! JSON, committed to the repository. A payout record that only exists on the
 //! machine that made it is not a record anyone else can rely on — which is
 //! also why this is not kept in `.git/`: a fresh clone has no `.git` state,
@@ -30,12 +30,12 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::chain::settlement::SettlementReceipt;
 use crate::config::STATE_DIR;
 use crate::error::{Error, Result};
 use crate::money::Amount;
 use crate::payout::{PayoutPlan, now_unix};
-use crate::settlement::SettlementReceipt;
-use crate::store::ObjectStore;
+use crate::storage::objects::ObjectStore;
 
 /// Id tag for a chain entry.
 pub const ENTRY_TAG: &str = "dedc";
@@ -432,7 +432,7 @@ impl Ledger {
     /// # Errors
     ///
     /// Returns [`Error::Config`] unless `plan_id` has the exact shape
-    /// [`PayoutPlan::compute_id`] produces — see [`crate::store::validate_id`].
+    /// [`PayoutPlan::compute_id`] produces — see [`crate::storage::objects::validate_id`].
     pub fn plan_path(&self, plan_id: &str) -> Result<PathBuf> {
         self.store.path_of(plan_id, PLAN_TAG)
     }
@@ -596,6 +596,72 @@ impl Drop for SettlementLock {
         // A lock left behind is a nuisance the message above explains; failing
         // to clean up must not mask the error that got us here.
         let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+#[cfg(test)]
+/// The ledger's lifetime totals are the one place outside `payout` where
+/// Dedalo *accumulates* money rather than carrying it, so they get the same
+/// treatment as the split arithmetic.
+///
+/// Replaying the chain must add up to exactly the settlements it contains,
+/// count no simulation, and never wrap.
+mod accumulation {
+    use super::{Ledger, LedgerEntry};
+    use crate::money::Amount;
+    use proptest::prelude::*;
+
+    fn temp_root(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "dedalo-prop-{tag}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(48))]
+
+        #[test]
+        fn lifetime_paid_is_the_sum_of_the_settlements_that_were_not_simulated(
+            entries in prop::collection::vec((0u128..=1_000_000_000_000u128, any::<bool>()), 0..12),
+        ) {
+            let root = temp_root("ledger");
+            let ledger = Ledger::open(&root).unwrap();
+
+            let mut expected = 0u128;
+            for (index, (units, dry_run)) in entries.iter().enumerate() {
+                if !dry_run {
+                    expected += units;
+                }
+                ledger
+                    .append(&LedgerEntry::Settled {
+                        at: index as i64,
+                        // Distinct ids, so nothing is collapsed as a repeat.
+                        plan_id: format!("ded1{:032x}", index),
+                        backend: "dry-run".into(),
+                        tx: None,
+                        total: Amount::from_base_units(*units),
+                        dry_run: *dry_run,
+                    })
+                    .unwrap();
+            }
+
+            let state = ledger.state().unwrap();
+            prop_assert_eq!(state.lifetime_paid, Amount::from_base_units(expected));
+
+            // The chain must still hash: accumulating is a read, and a read
+            // that rewrote history would be caught here.
+            prop_assert_eq!(ledger.verify().unwrap(), entries.len());
+
+            std::fs::remove_dir_all(&root).unwrap();
+        }
     }
 }
 

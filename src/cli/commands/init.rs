@@ -173,10 +173,10 @@ fn default_branch(dir: &std::path::Path) -> Option<String> {
     };
 
     // What the remote says its default is.
-    if let Some(head) = git(&["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]) {
-        if let Some(branch) = head.strip_prefix("origin/") {
-            return Some(branch.to_string());
-        }
+    if let Some(head) = git(&["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])
+        && let Some(branch) = head.strip_prefix("origin/")
+    {
+        return Some(branch.to_string());
     }
     // Then the conventional names, if they exist here.
     for candidate in ["main", "master"] {

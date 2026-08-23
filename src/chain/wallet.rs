@@ -152,6 +152,42 @@ impl Address {
         }
     }
 
+    /// The twenty bytes an EVM chain actually stores.
+    ///
+    /// The canonical form is a checksummed string because that is what a
+    /// plan records and a human reads. A chain has neither problem: it holds
+    /// twenty bytes, and this is the one place the two representations meet.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Address`] if this is not an EVM address. Truncating
+    /// a wider one would produce twenty valid-looking bytes pointing at an
+    /// account nobody controls.
+    pub fn evm_bytes(&self) -> Result<[u8; 20]> {
+        let body = self
+            .canonical
+            .strip_prefix("0x")
+            .ok_or_else(|| Error::address(&self.canonical, "not an EVM address"))?;
+        let raw = hex::decode(body)
+            .map_err(|e| Error::address(&self.canonical, format!("not hex: {e}")))?;
+        raw.try_into()
+            .map_err(|_| Error::address(&self.canonical, "an EVM address is 20 bytes"))
+    }
+
+    /// Build an EVM address from the twenty bytes a chain holds.
+    ///
+    /// Infallible: any twenty bytes are a valid EVM account. The checksum is
+    /// computed rather than checked, because there is nothing to check —
+    /// EIP-55 protects a *typed* address, and these did not come from a
+    /// keyboard.
+    pub fn from_evm_bytes(raw: [u8; 20]) -> Self {
+        let lower = hex::encode(raw);
+        Self {
+            kind: AddressKind::Evm,
+            canonical: format!("0x{}", checksum_body(&lower)),
+        }
+    }
+
     /// The form two addresses are compared by, following the chain's rules.
     pub fn key(&self) -> String {
         self.kind.comparison_key(&self.canonical)
