@@ -45,6 +45,7 @@ pub mod error;
 pub mod git;
 pub mod identity;
 pub mod ledger;
+pub mod merkle;
 pub mod money;
 pub mod payout;
 pub mod settlement;

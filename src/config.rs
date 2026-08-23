@@ -104,12 +104,9 @@ pub struct SettlementConfig {
     /// EIP-155 chain id, checked against the endpoint before signing.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chain_id: Option<u64>,
-    /// Distributor contract that performs the batched transfer.
+    /// Claim contract a round is deposited into.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub contract: Option<String>,
-    /// Name of the env var holding the signing key. The key itself is never
-    /// stored in the repo.
-    pub signer_env: String,
 }
 
 impl Default for SettlementConfig {
@@ -119,7 +116,6 @@ impl Default for SettlementConfig {
             rpc_url: None,
             chain_id: None,
             contract: None,
-            signer_env: "DEDALO_SIGNER_KEY".into(),
         }
     }
 }

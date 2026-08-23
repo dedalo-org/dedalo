@@ -1,0 +1,16 @@
+# Deliberately dependency-free: no forge-std, no OpenZeppelin, nothing to pin
+# or to audit beyond DedaloClaim.sol itself. The tests declare the one cheatcode
+# they need inline.
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+libs = []
+optimizer = true
+optimizer_runs = 200
+# Warnings in a contract that holds money are defects.
+deny = "warnings"
+
+# solc is not downloaded: it comes from the workspace shell, so the compiler
+# is pinned by the same flake as everything else and a build needs no network.
+# `ws-check` passes `--use "$(command -v solc)"`.

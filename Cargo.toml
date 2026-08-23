@@ -27,6 +27,9 @@ exclude = [
   "/cliff.toml",
   "/deny.toml",
   "/taplo.toml",
+  # The contract source ships; its build output does not.
+  "/contracts/out",
+  "/contracts/cache",
 ]
 
 [features]

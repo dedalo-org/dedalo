@@ -4,8 +4,17 @@ The decisions on this page shape the whole settlement layer. They were taken
 before any contract was written, because reversing them afterwards means
 rewriting the part of the system that touches money.
 
-**Status.** Decided, not built. Nothing here is implemented: the `evm` backend
-validates a plan and stops before signing. See #8 and #9.
+**Status.** Decided, and now partly built.
+
+| Decision | State |
+| --- | --- |
+| Pull, not push | Built. `dedalo::merkle` produces the root; `contracts/src/DedaloClaim.sol` verifies proofs against it, with twelve tests including the Rust vectors. Unaudited, undeployed. |
+| The key is not in CI | Built, by removal. `settlement.signer_env` is gone, the `evm` backend broadcasts nothing, and `dedalo propose` prints transactions for people to sign. |
+| Chain-agnostic addresses | Built. `wallet::AddressKind`, one variant. |
+
+Nothing here has moved a coin. Of the five prerequisites at the bottom of this
+page, one is done and the four that matter — a deployed contract, an audit, a
+multisig, a testnet round — are not.
 
 ## Where this started
 
@@ -66,9 +75,17 @@ This is why the pipeline hardening matters as much as the arithmetic: `zizmor`,
 pinned action SHAs and the ban on interpolating expressions into `run:` blocks
 exist because that boundary is what a key in CI would have crossed.
 
-**Consequence.** `settlement.signer_env` describes a capability Dedalo should
-not have. It stays for now because the `evm` backend is inert, and it should be
-removed rather than implemented.
+**Consequence.** `settlement.signer_env` described a capability Dedalo should
+not have, and has been removed. The `evm` backend now validates chain settings
+and refuses to broadcast, pointing at `dedalo propose`, which emits:
+
+```text
+1. approve(claimContract, total)                  → the token
+2. deposit(planId, merkleRoot, token, total)      → the claim contract
+```
+
+with the calldata encoded, so a signer compares it against a plan they can
+read instead of trusting a tool they cannot.
 
 ## Decision 3 — chain-agnostic, honestly
 
@@ -97,8 +114,20 @@ be, before anyone can broadcast. Testnet-first is the safer starting point.
 2. An independent audit of it, published.
 3. A Safe, with signers who are not one person.
 4. A testnet round settled end to end, from `dedalo plan` to a claim.
-5. Removal of `settlement.signer_env`, so the config cannot describe a key CI
-   is meant to hold.
+5. ~~Removal of `settlement.signer_env`, so the config cannot describe a key CI
+   is meant to hold.~~ **Done.**
 
-Until all five, the honest state of this project is what the code already says:
-`Error::NotImplemented`.
+Until the first four, the honest state of this project is what the code already
+says: `Error::NotImplemented`.
+
+## What exists now, and what it is worth
+
+`ClaimTree` and `DedaloClaim` are two implementations of one leaf encoding, and
+the contract's test suite is pinned to a root and five proofs that the Rust
+side produced. They agree. That is worth something — it is the class of bug
+that silently pays nobody — and it is not an audit. Nobody outside this
+repository has looked at the contract, it has never held a coin, and the
+reentrancy, ERC-20 and expiry paths have been reasoned about by their author
+and tested by their author.
+
+Treat it as a specification that happens to compile.

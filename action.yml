@@ -25,9 +25,10 @@ inputs:
     default: ""
   execute:
     description: >
-      Broadcast for real instead of simulating. Requires the signing key in the
-      environment variable named by `settlement.signer_env`. Defaults to false,
-      because the safe thing must be the default.
+      Broadcast for real instead of simulating. No backend can, today:
+      Dedalo holds no signing key by design, and a round is funded by people
+      executing what `dedalo propose` prints. Defaults to false, because the
+      safe thing must be the default.
     required: false
     default: "false"
   working-directory:

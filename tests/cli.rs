@@ -578,3 +578,73 @@ fn a_pre_chain_ledger_stops_the_cli_until_it_is_migrated() {
     let report = json_of(repo.path(), &["verify"]);
     assert_eq!(report["ok"], false, "the plan it names was never stored");
 }
+
+/// `dedalo propose` is the whole settlement story: Dedalo produces the
+/// transactions and no signature. The test pins what a signer would paste.
+#[test]
+fn propose_emits_an_approval_then_a_deposit_and_signs_nothing() {
+    let repo = project();
+
+    // A round needs a chain and a claim contract to be proposed at all.
+    let config_path = repo.path().join("dedalo.toml");
+    let config = std::fs::read_to_string(&config_path).unwrap();
+    std::fs::write(
+        &config_path,
+        config.replacen(
+            "backend = \"dry-run\"",
+            "backend = \"evm\"\nchain_id = 8453\n\
+             contract = \"0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb\"",
+            1,
+        ),
+    )
+    .unwrap();
+
+    let proposal = json_of(repo.path(), &["propose", "--amount", "1000"]);
+
+    assert_eq!(proposal["transactions"].as_array().unwrap().len(), 2);
+    assert_eq!(proposal["transactions"][0]["step"], 1);
+    assert_eq!(proposal["transactions"][1]["step"], 2);
+    assert_eq!(proposal["transactions"][0]["chain_id"], 8453);
+
+    // approve(address,uint256) then deposit(bytes16,bytes32,address,uint256).
+    let approve = proposal["transactions"][0]["data"].as_str().unwrap();
+    let deposit = proposal["transactions"][1]["data"].as_str().unwrap();
+    assert!(approve.starts_with("0x095ea7b3"), "{approve}");
+    assert!(deposit.starts_with("0xfae389aa"), "{deposit}");
+
+    // The root is a bytes32, and it is what the deposit carries.
+    let root = proposal["merkle_root"].as_str().unwrap();
+    assert_eq!(root.len(), 2 + 64, "{root}");
+    assert!(deposit.contains(root.trim_start_matches("0x")), "{deposit}");
+
+    // Nothing anywhere is a signature or a key.
+    let raw = proposal.to_string();
+    for forbidden in ["signature", "privateKey", "signer_env", "\"v\":", "\"r\":"] {
+        assert!(!raw.contains(forbidden), "proposal mentions {forbidden}");
+    }
+}
+
+/// The backend that used to promise a broadcast now says why there is none.
+#[test]
+fn settling_through_evm_explains_that_dedalo_holds_no_key() {
+    let repo = project();
+    let config_path = repo.path().join("dedalo.toml");
+    let config = std::fs::read_to_string(&config_path).unwrap();
+    std::fs::write(
+        &config_path,
+        config.replacen(
+            "backend = \"dry-run\"",
+            "backend = \"evm\"\nchain_id = 8453\n\
+             contract = \"0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb\"",
+            1,
+        ),
+    )
+    .unwrap();
+
+    dedalo(repo.path())
+        .args(["settle", "--amount", "1000", "--execute"])
+        .assert()
+        .failure()
+        .stderr(contains("holds no signing key"))
+        .stderr(contains("dedalo propose"));
+}
