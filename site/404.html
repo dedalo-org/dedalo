@@ -3,63 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Not found — Dedalo</title>
-<meta name="description" content="That page is not in this repository's history.">
+<title>404 — dedalo</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧭</text></svg>">
-<meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
-<meta name="theme-color" content="#0b0d0b" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#f2f1ea" media="(prefers-color-scheme: light)">
 <style>
-  :root {
-    color-scheme: dark light;
-    --bg: #0b0d0b; --bg-alt: #10130f; --line: #26301f;
-    --fg: #d4e0c8; --fg-dim: #7f8f72; --fg-faint: #4d5a44; --green: #7dff9b;
-    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-  }
+  :root { color-scheme: dark light; --bg: #0b0d0b; --fg: #d7dbd4; --dim: #6f776c; --hi: #7ee787; }
   @media (prefers-color-scheme: light) {
-    :root {
-      --bg: #f2f1ea; --bg-alt: #eae9df; --line: #d2d0c2;
-      --fg: #14170f; --fg-dim: #55604a; --fg-faint: #8b9481; --green: #10743f;
-    }
+    :root { --bg: #f2f1ea; --fg: #24281f; --dim: #6b7264; --hi: #1a7f37; }
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; min-height: 100vh; display: grid; place-content: center;
-    gap: 0.5rem; padding: 2rem; text-align: center;
-    background: var(--bg); color: var(--fg); font-family: var(--mono); font-size: 15px;
-    background-image:
-      linear-gradient(var(--bg-alt) 1px, transparent 1px),
-      linear-gradient(90deg, var(--bg-alt) 1px, transparent 1px);
-    background-size: 48px 48px, 48px 48px;
+    gap: 1rem; padding: 2rem; background: var(--bg); color: var(--fg);
+    font: 15px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    text-align: center;
   }
-  .code {
-    font-size: clamp(3rem, 14vw, 6rem); font-weight: 700; letter-spacing: 0.1em;
-    color: var(--green); line-height: 1;
-  }
-  .code span {
-    display: inline-block; width: 0.42em; height: 0.82em; margin-left: 0.1em;
-    background: var(--green); vertical-align: -0.05em;
-    animation: blink 1.15s steps(1) infinite;
-  }
-  @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
-  p { color: var(--fg-dim); margin: 0; font-size: 0.86rem; }
-  .links { margin-top: 1.2rem; display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
-  .links a {
-    color: var(--fg); text-decoration: none; font-size: 0.8rem;
-    border: 1px solid var(--line); padding: 0.45rem 0.9rem; background: var(--bg-alt);
-  }
-  .links a:hover { background: var(--green); color: var(--bg); border-color: var(--green); }
-  :focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
-  @media (prefers-reduced-motion: reduce) { .code span { animation: none; } }
+  .code { font-size: 3rem; font-weight: 600; letter-spacing: .08em; }
+  p { margin: 0; color: var(--dim); }
+  .links { display: flex; gap: 1.25rem; justify-content: center; flex-wrap: wrap; }
+  a { color: var(--hi); text-decoration: none; border-bottom: 1px solid currentColor; }
+  a:hover { opacity: .8; }
 </style>
 </head>
 <body>
-  <div class="code">404<span></span></div>
+  <div class="code">404</div>
   <p>that page is not in this repository's history.</p>
+  <!-- Absolute, because a 404 is served from any depth. -->
   <div class="links">
-    <a href="/dedalo/">← back to the project</a>
     <a href="/dedalo/api/">api reference</a>
+    <a href="https://dedalo-org.github.io/">dedalo-org</a>
   </div>
 </body>
 </html>
