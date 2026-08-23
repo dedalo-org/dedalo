@@ -48,6 +48,13 @@ the body. [RELEASING.md](RELEASING.md) has the full policy.
 - **Public API changes carry rustdoc.** The crate sets
   `#![warn(missing_docs)]` and CI builds docs with `-D warnings`, so an
   undocumented `pub` item is a build failure.
+- **A new module carries a verification entry.** `verification.toml` accounts
+  for every module under `src/`, and `tests/verification_manifest.rs` fails the
+  build if one is missing. Say how it is verified, or why it needs none — an
+  exemption with a reason is a fine answer, and the gate checks the reason
+  stays true by refusing to let an exempt module do arithmetic or build an
+  address. Adding arithmetic anywhere changes a recorded count and fails the
+  build until someone looks.
 - **Money changes carry tests.** Anything touching `money`, `attribution`,
   `treasury` or `payout` needs a test proving the amounts still balance —
   including the awkward cases: zero weights, a single payee, amounts that do

@@ -282,3 +282,67 @@ proptest! {
         plan.verify().unwrap();
     }
 }
+
+/// The ledger's lifetime totals are the one place outside `payout` where
+/// Dedalo *accumulates* money rather than carrying it, so they get the same
+/// treatment as the split arithmetic.
+///
+/// Replaying the chain must add up to exactly the settlements it contains,
+/// count no simulation, and never wrap.
+mod ledger_accumulation {
+    use super::*;
+    use dedalo::ledger::{Ledger, LedgerEntry};
+
+    fn temp_root(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "dedalo-prop-{tag}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(48))]
+
+        #[test]
+        fn lifetime_paid_is_the_sum_of_the_settlements_that_were_not_simulated(
+            entries in prop::collection::vec((0u128..=1_000_000_000_000u128, any::<bool>()), 0..12),
+        ) {
+            let root = temp_root("ledger");
+            let ledger = Ledger::open(&root).unwrap();
+
+            let mut expected = 0u128;
+            for (index, (units, dry_run)) in entries.iter().enumerate() {
+                if !dry_run {
+                    expected += units;
+                }
+                ledger
+                    .append(&LedgerEntry::Settled {
+                        at: index as i64,
+                        // Distinct ids, so nothing is collapsed as a repeat.
+                        plan_id: format!("ded1{:032x}", index),
+                        backend: "dry-run".into(),
+                        tx: None,
+                        total: Amount::from_base_units(*units),
+                        dry_run: *dry_run,
+                    })
+                    .unwrap();
+            }
+
+            let state = ledger.state().unwrap();
+            prop_assert_eq!(state.lifetime_paid, Amount::from_base_units(expected));
+
+            // The chain must still hash: accumulating is a read, and a read
+            // that rewrote history would be caught here.
+            prop_assert_eq!(ledger.verify().unwrap(), entries.len());
+
+            std::fs::remove_dir_all(&root).unwrap();
+        }
+    }
+}

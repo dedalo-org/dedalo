@@ -68,6 +68,48 @@ The test suite runs in five layers:
 | end-to-end | the library against real repositories with real merge commits |
 | CLI | exit codes and the `--json` shape that `action.yml` parses |
 
+### What is proved, and what is only tested
+
+Tests sample. Some of this is proved, and the difference is worth being exact
+about, so it is written down per module in
+[`verification.toml`](verification.toml) rather than implied.
+
+| Method | What passing means |
+| --- | --- |
+| **exhaustive** | Every value in a complete finite domain was tried. No counterexample exists in that domain. |
+| **smt** | A solver discharged the conditions. `solc --model-checker-engine bmc` over the contract, from an arbitrary starting state. |
+| property | Thousands of generated samples. **Not a proof** — a rare counterexample can survive, and one did. |
+| tests | Hand-picked cases. |
+| exempt | The module decides neither how much money moves nor where it goes. |
+
+What is exhaustively proved today:
+
+- **every fee schedule** — all 50,005,000 `(protocol_bps, treasury_bps)` pairs
+  that validate, against the amounts where integer arithmetic breaks: the three
+  slices sum to exactly the gross, and no fee is ever rounded up;
+- **every basis-point value** — all 65,536, floor-exact and never exceeding the
+  input;
+- **every small weight vector** — all 2,800 of length ≤ 4 with weights ≤ 6:
+  shares conserve the total, a zero weight is never paid, a larger weight never
+  receives less;
+- **every tree shape to 64 claims** — each claim proves against its own root,
+  and against no other claim's proof;
+- **the contract** — all ten arithmetic and assertion conditions in
+  `DedaloClaim.sol`, discharged by solc's model checker.
+
+The gate is `tests/verification_manifest.rs`, and it is the part that keeps
+the table above from becoming decoration. It fails the build when a module
+under `src/` is not accounted for, when a declared proof's test has been
+deleted, when the money arithmetic in a module changes count, or when a module
+claiming exemption starts doing arithmetic or building an address. So a new
+module cannot be merged without someone deciding what verifies it.
+
+Two things it deliberately does not claim. `property` is not a proof, and is
+labelled as such. And the contract's **CHC** engine — the one that reasons
+across transactions — does not terminate on `DedaloClaim` within ten minutes,
+so the gate uses BMC; that limit is recorded in `verification.toml` instead of
+being quietly omitted.
+
 `tests/adversarial.rs` is the one to read first. It asks whether Dedalo can
 be made to compute a *wrong* answer: whether two different plans can share an
 id, whether one account spelled two ways can be paid twice, whether a plan id

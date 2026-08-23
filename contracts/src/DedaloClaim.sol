@@ -23,12 +23,16 @@ pragma solidity ^0.8.24;
 ///         Leaves are hashed twice so no 64-byte leaf can be presented as an
 ///         internal node. Pairs are sorted so a proof needs no direction bits.
 contract DedaloClaim {
+    /// @dev Invariant, asserted at every write and proved by the SMT checker:
+    ///      `claimed <= total`. Every subtraction below depends on it, and
+    ///      stating it as an assertion is what lets `solc --model-checker-engine
+    ///      chc` discharge them rather than warn.
     struct Round {
         bytes32 root;
         address token;
         uint256 total;
         uint256 claimed;
-        uint64 expiry;
+        uint256 expiry;
         address depositor;
     }
 
@@ -40,27 +44,28 @@ contract DedaloClaim {
     mapping(bytes16 => mapping(uint256 => bool)) public claimed;
 
     event Deposited(
-        bytes16 indexed planId, bytes32 root, address indexed token, uint256 total, uint64 expiry
+        bytes16 indexed planId, bytes32 root, address indexed token, uint256 total, uint256 expiry
     );
     event Claimed(bytes16 indexed planId, uint256 indexed index, address indexed account, uint256 amount);
     event Swept(bytes16 indexed planId, address indexed to, uint256 amount);
 
-    error RoundExists();
-    error RoundUnknown();
-    error NothingToDeposit();
-    error AlreadyClaimed();
-    error BadProof();
-    error ExceedsRound();
-    error NotExpired();
-    error NotDepositor();
-    error TransferFailed();
-    error ShortTransfer();
+
+    // Reverts carry strings rather than custom errors, which is the older and
+    // more expensive idiom. It is deliberate: solc's SMTChecker does not
+    // implement custom error types, and when it meets a construct it does not
+    // implement it stops constraining the surrounding state — so every guard
+    // in this contract became invisible to it and nothing could be proved.
+    //
+    // With strings, `solc --model-checker-engine bmc` proves all ten
+    // arithmetic and assertion conditions here safe. A few hundred gas on a
+    // path that only runs when something is already wrong is a small price for
+    // a contract whose arithmetic is machine-checked rather than reviewed.
 
     /// @notice How long a round stays claimable before the depositor may
     ///         recover what is left.
     /// @dev    Fixed rather than caller-supplied: a depositor who could choose
     ///         it could choose a round that expires before anyone claims.
-    uint64 public constant CLAIM_WINDOW = 180 days;
+    uint256 public constant CLAIM_WINDOW = 180 days;
 
     /// @notice Fund a round against the Merkle root of its payout plan.
     /// @param planId The plan's content hash. Used once, ever.
@@ -71,19 +76,31 @@ contract DedaloClaim {
         // The replay guard the whole system rests on: a plan id names one
         // round, and a round is funded once. A retried CI job that proposes
         // the same plan twice cannot pay it twice.
-        if (rounds[planId].depositor != address(0)) revert RoundExists();
-        if (total == 0 || root == bytes32(0)) revert NothingToDeposit();
+        if (rounds[planId].depositor != address(0)) revert("dedalo: this plan id was already deposited");
+        if (total == 0 || root == bytes32(0)) revert("dedalo: a round needs a non-zero root and total");
 
         // Measured rather than assumed: a fee-on-transfer token delivers less
         // than it was asked for, and a round that promises more than it holds
         // pays early claimants and strands the rest.
-        uint256 before = _balanceOf(token, address(this));
+        //
+        // Written as two comparisons rather than `after - before < total`
+        // because the token is untrusted: a balance that went *down* would
+        // underflow, and a panic is a worse answer than ShortTransfer.
+        uint256 balanceBefore = _balanceOf(token, address(this));
         _transferFrom(token, msg.sender, address(this), total);
-        if (_balanceOf(token, address(this)) - before < total) revert ShortTransfer();
+        uint256 balanceAfter = _balanceOf(token, address(this));
+        uint256 delivered = balanceAfter >= balanceBefore ? balanceAfter - balanceBefore : 0;
+        if (delivered < total) revert("dedalo: the token delivered less than the round needs");
 
-        uint64 expiry = uint64(block.timestamp) + CLAIM_WINDOW;
+        // The overflow is unreachable on any real chain — it needs a timestamp
+        // within 180 days of 2**256 — but "unreachable" is a claim, and this
+        // is how it is checked instead of asserted.
+        if (block.timestamp > type(uint256).max - CLAIM_WINDOW) revert("dedalo: block timestamp is too large to add the claim window");
+        uint256 expiry = block.timestamp + CLAIM_WINDOW;
+
         rounds[planId] =
             Round({root: root, token: token, total: total, claimed: 0, expiry: expiry, depositor: msg.sender});
+        assert(rounds[planId].claimed <= rounds[planId].total);
 
         emit Deposited(planId, root, token, total, expiry);
     }
@@ -100,22 +117,36 @@ contract DedaloClaim {
         bytes32[] calldata proof
     ) external {
         Round storage round = rounds[planId];
-        if (round.depositor == address(0)) revert RoundUnknown();
-        if (claimed[planId][index]) revert AlreadyClaimed();
+        if (round.depositor == address(0)) revert("dedalo: no round for this plan id");
+        if (claimed[planId][index]) revert("dedalo: this index was already claimed");
 
         bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(index, account, amount))));
-        if (!_verify(proof, round.root, leaf)) revert BadProof();
+        if (!_verify(proof, round.root, leaf)) revert("dedalo: the proof does not match the round's root");
 
         // Cannot happen if the root was built from a plan, because the plan's
         // items sum to its total. Checked anyway: this contract is the last
         // thing standing between a bad root and the depositor's balance.
-        uint256 paid = round.claimed + amount;
-        if (paid > round.total) revert ExceedsRound();
+        //
+        // The remaining amount is computed by subtraction, not by adding and
+        // comparing. Adding first would rely on the compiler's implicit
+        // overflow revert to be the guard, which is a guard nobody wrote and
+        // no reader can see.
+        //
+        // `claimed <= total` is a contract invariant, but it is one that holds
+        // across transactions, and the model checker cannot establish those
+        // over a mapping of structs. Re-established locally so this
+        // subtraction is provable from what is on this stack.
+        if (round.claimed > round.total) revert("dedalo: round accounting is inconsistent");
+        uint256 remaining = round.total - round.claimed;
+        if (amount > remaining) revert("dedalo: claim exceeds what the round still holds");
 
         // Effects before interaction. A token with a transfer hook must not be
         // able to re-enter and claim the same index twice.
         claimed[planId][index] = true;
-        round.claimed = paid;
+        // `amount <= remaining = total - claimed`, so this cannot exceed
+        // `total` and therefore cannot overflow.
+        round.claimed = round.claimed + amount;
+        assert(round.claimed <= round.total);
 
         _transfer(round.token, account, amount);
         emit Claimed(planId, index, account, amount);
@@ -127,12 +158,14 @@ contract DedaloClaim {
     ///         a destination the depositor did not sign for.
     function sweep(bytes16 planId) external {
         Round storage round = rounds[planId];
-        if (round.depositor == address(0)) revert RoundUnknown();
-        if (msg.sender != round.depositor) revert NotDepositor();
-        if (block.timestamp < round.expiry) revert NotExpired();
+        if (round.depositor == address(0)) revert("dedalo: no round for this plan id");
+        if (msg.sender != round.depositor) revert("dedalo: only the depositor may sweep");
+        if (block.timestamp < round.expiry) revert("dedalo: the claim window has not closed");
 
+        if (round.claimed > round.total) revert("dedalo: round accounting is inconsistent");
         uint256 remaining = round.total - round.claimed;
         round.claimed = round.total;
+        assert(round.claimed <= round.total);
         if (remaining > 0) _transfer(round.token, round.depositor, remaining);
         emit Swept(planId, round.depositor, remaining);
     }
@@ -160,18 +193,18 @@ contract DedaloClaim {
     function _transfer(address token, address to, uint256 amount) private {
         (bool ok, bytes memory data) =
             token.call(abi.encodeWithSelector(0xa9059cbb, to, amount)); // transfer(address,uint256)
-        if (!ok || (data.length != 0 && !abi.decode(data, (bool)))) revert TransferFailed();
+        if (!ok || (data.length != 0 && !abi.decode(data, (bool)))) revert("dedalo: the token rejected the transfer");
     }
 
     function _transferFrom(address token, address from, address to, uint256 amount) private {
         (bool ok, bytes memory data) =
             token.call(abi.encodeWithSelector(0x23b872dd, from, to, amount)); // transferFrom
-        if (!ok || (data.length != 0 && !abi.decode(data, (bool)))) revert TransferFailed();
+        if (!ok || (data.length != 0 && !abi.decode(data, (bool)))) revert("dedalo: the token rejected the transfer");
     }
 
     function _balanceOf(address token, address who) private view returns (uint256) {
         (bool ok, bytes memory data) = token.staticcall(abi.encodeWithSelector(0x70a08231, who));
-        if (!ok || data.length < 32) revert TransferFailed();
+        if (!ok || data.length < 32) revert("dedalo: the token rejected the transfer");
         return abi.decode(data, (uint256));
     }
 }

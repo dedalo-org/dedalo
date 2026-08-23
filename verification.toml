@@ -1,0 +1,257 @@
+# How every module in this crate is verified.
+#
+# `tests/verification_manifest.rs` fails the build unless this file accounts
+# for every module under `src/`, so a new one cannot be added without someone
+# deciding what verifies it. It also counts the money arithmetic in each module
+# and compares it to `arithmetic_sites` below: if the count moves, the build
+# fails and the change has to be looked at rather than absorbed.
+#
+# The methods, strongest first. The distinction between them is not decoration:
+#
+#   exhaustive  Every value in a complete finite domain is tried. Passing is a
+#               proof that no counterexample exists in that domain.
+#   smt         A solver discharged the conditions. `solc --model-checker-engine
+#               bmc` over the contracts, from an arbitrary starting state.
+#   property    Generated inputs. Thousands of samples, not a proof — a rare
+#               counterexample can survive it, and one did: see the EIP-55
+#               collisions pinned in tests/adversarial.rs.
+#   tests       Hand-picked cases only.
+#   exempt      Nothing here decides how much money moves or where it goes.
+#               Must have zero arithmetic sites, and must not build an Address.
+#
+# Being honest about which is which is the point. A module marked `property` is
+# not proved, and this file is where that is admitted rather than implied.
+
+[meta]
+# Bumped when the meaning of a method changes, so a stale manifest is visible.
+schema = 1
+
+# ---------------------------------------------------------------- proved ---
+
+[modules.money]
+method = "exhaustive"
+arithmetic_sites = 10
+harnesses = [
+  "exhaustive::every_basis_point_value_rounds_down_and_never_exceeds_the_input",
+  "exhaustive::every_small_weight_vector_conserves_the_total",
+]
+notes = """
+Exhaustive over all 65,536 basis-point values and over every weight vector of \
+up to four entries with weights 0..=6. Longer vectors and larger weights are \
+sampled by properties.rs, not proved."""
+
+[modules.treasury]
+method = "exhaustive"
+arithmetic_sites = 5
+harnesses = ["exhaustive::every_valid_fee_schedule_conserves_the_round"]
+notes = """
+Exhaustive over all 50,005,000 fee schedules `validate` accepts. The gross \
+amount is not enumerable, so it is pinned to the values where integer \
+arithmetic breaks."""
+
+[modules.merkle]
+method = "exhaustive"
+arithmetic_sites = 2
+harnesses = ["exhaustive::every_tree_size_up_to_sixty_four_proves_exactly_its_own_claims"]
+notes = """
+Exhaustive over every tree size from one to sixty-four, which covers every \
+shape the odd-node promotion rule produces. The same encoding is verified \
+independently on chain: contracts/test/DedaloClaim.t.sol is pinned to a root \
+and proofs this module produced."""
+
+# ------------------------------------------------------------- sampled ---
+
+[modules.payout]
+method = "property"
+arithmetic_sites = 13
+harnesses = [
+  "properties::plans_always_balance_and_verify",
+  "properties::plan_ids_ignore_the_clock",
+  "properties::tampering_with_a_plan_breaks_its_id",
+  "properties::one_wallet_is_paid_once",
+  "adversarial::every_base_unit_is_assigned_or_declared",
+  "adversarial::a_round_with_no_payees_declares_the_whole_pool",
+]
+notes = """
+A plan's shape depends on a config, an attribution and a range together, and \
+that product is not a finite domain worth enumerating. Sampled instead."""
+
+[modules.attribution]
+method = "property"
+arithmetic_sites = 6
+harnesses = [
+  "adversarial::attribution_survives_hostile_commit_metadata",
+  "adversarial::extreme_policies_saturate_rather_than_wrap",
+]
+
+[modules.wallet]
+method = "property"
+arithmetic_sites = 0
+harnesses = [
+  "adversarial::a_mutated_address_parses_exactly_when_its_checksum_is_valid",
+  "adversarial::address_parsing_never_panics",
+]
+notes = """
+No arithmetic, but it decides *where* money lands, so it may not be exempt. \
+The property compares against an independent EIP-55 implementation in both \
+directions."""
+
+[modules.ledger]
+method = "property"
+arithmetic_sites = 5
+harnesses = ["properties::lifetime_paid_is_the_sum_of_the_settlements_that_were_not_simulated"]
+notes = """
+The only place outside `payout` that accumulates rather than carries: \
+`state()` replays the chain into lifetime totals."""
+
+# --------------------------------------------------------------- tested ---
+
+[modules.config]
+method = "tests"
+arithmetic_sites = 0
+notes = "Builds Addresses from a file, so not exempt. Covered by unit tests and tests/cli.rs."
+
+[modules.identity]
+method = "tests"
+arithmetic_sites = 0
+notes = "Maps git emails to Addresses. Covered by unit tests."
+
+[modules.store]
+method = "tests"
+arithmetic_sites = 0
+notes = """
+No arithmetic, but an id here becomes a filesystem path. The unit tests \
+enumerate the hostile shapes rather than sample them."""
+
+[modules."settlement/abi"]
+method = "tests"
+arithmetic_sites = 2
+notes = """
+Carries amounts into calldata; it does not decide them. Selectors are checked \
+against the canonical published values, and the encoding is checked again on \
+chain by the contract suite."""
+
+[modules."settlement/proposal"]
+method = "tests"
+arithmetic_sites = 2
+notes = "Reads the tree's total and encodes it. Decides nothing."
+
+[modules."settlement/dry_run"]
+method = "tests"
+arithmetic_sites = 0
+notes = "Sums a plan it was given, for a receipt."
+
+[modules."cli/commands/plan"]
+method = "tests"
+arithmetic_sites = 3
+notes = """
+Sums item amounts to print a total. Display only — the plan it prints was \
+decided by `payout`. Covered by tests/cli.rs, which pins the --json shape."""
+
+[modules."cli/commands/identity"]
+method = "tests"
+arithmetic_sites = 0
+notes = "Parses the address a user types, and warns on a weak checksum."
+
+# --------------------------------------------------------------- exempt ---
+
+[modules.error]
+method = "exempt"
+arithmetic_sites = 0
+reason = "Error types and their messages."
+
+[modules.git]
+method = "exempt"
+arithmetic_sites = 0
+reason = "Reads merge history. Produces commits and authors, never amounts."
+
+[modules."git/process"]
+method = "exempt"
+arithmetic_sites = 0
+reason = "Drives the git binary and parses its output."
+
+[modules.testing]
+method = "exempt"
+arithmetic_sites = 0
+reason = "Builds throwaway repositories for tests. Never compiled into a release."
+
+[modules.settlement]
+method = "exempt"
+arithmetic_sites = 0
+reason = "The backend trait and its selector."
+
+[modules."settlement/evm"]
+method = "exempt"
+arithmetic_sites = 0
+reason = "Validates chain settings and refuses to broadcast. Moves nothing."
+
+[modules.cli]
+method = "exempt"
+arithmetic_sites = 0
+reason = "Argument parsing, dispatch and process exit."
+
+[modules."cli/args"]
+method = "exempt"
+arithmetic_sites = 0
+reason = "Argument definitions."
+
+[modules."cli/ui"]
+method = "exempt"
+arithmetic_sites = 2
+reason = "Tables and colour."
+arithmetic_is_not_money = "Column padding and string truncation, both on display widths."
+
+[modules."cli/commands"]
+method = "exempt"
+arithmetic_sites = 0
+reason = "Shared helpers: opening the engine, printing JSON, display paths."
+
+[modules."cli/commands/init"]
+method = "exempt"
+arithmetic_sites = 0
+reason = "Writes a config template."
+
+[modules."cli/commands/ledger"]
+method = "exempt"
+arithmetic_sites = 1
+reason = "Prints the chain, and migrates a pre-chain file into it."
+arithmetic_is_not_money = "`entries.len().saturating_sub(limit)` — how many entries to skip when printing."
+
+[modules."cli/commands/propose"]
+method = "exempt"
+arithmetic_sites = 0
+reason = "Prints what settlement/proposal built."
+
+[modules."cli/commands/scan"]
+method = "exempt"
+arithmetic_sites = 1
+reason = "Prints merges and contribution scores."
+arithmetic_is_not_money = "`merges.len().saturating_sub(limit)` — how many merges to skip when printing."
+
+[modules."cli/commands/settle"]
+method = "exempt"
+arithmetic_sites = 0
+reason = "Loads or builds a plan and hands it to a backend."
+
+[modules."cli/commands/status"]
+method = "exempt"
+arithmetic_sites = 0
+reason = "Prints the cursor the ledger derived."
+
+[modules."cli/commands/verify"]
+method = "exempt"
+arithmetic_sites = 0
+reason = "Walks the chain and reports. Reads only."
+
+# ------------------------------------------------------------- contracts ---
+
+[contracts."src/DedaloClaim.sol"]
+method = "smt"
+engine = "bmc"
+conditions_proved = 10
+notes = """
+`solc --model-checker-engine bmc` discharges every arithmetic and assertion \
+condition from an arbitrary starting state. The CHC engine, which reasons \
+across transactions, does not terminate on this contract within ten minutes; \
+that is recorded rather than hidden. scripts/verify-contracts.py is the gate; it does not ship in the crate archive, \
+since `scripts/` is excluded — run it from a clone."""
