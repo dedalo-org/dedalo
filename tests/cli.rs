@@ -500,3 +500,81 @@ fn linking_a_weakly_checksummed_address_warns_and_reports_the_bits() {
         .success()
         .stderr(contains("bits of checksum").not());
 }
+
+/// The ledger is a hash chain, and `dedalo verify` is what makes that worth
+/// anything: a third party with a clone can run it, and an entry edited after
+/// the fact stops it.
+#[test]
+fn verify_accepts_an_intact_ledger_and_rejects_an_edited_one() {
+    let repo = project();
+
+    dedalo(repo.path())
+        .args(["plan", "--amount", "1000", "--save"])
+        .assert()
+        .success();
+
+    let report = json_of(repo.path(), &["verify"]);
+    assert_eq!(report["ok"], true);
+    assert_eq!(report["entries"], 1);
+    let head = report["head"].as_str().unwrap().to_string();
+    assert!(head.starts_with("dedc"), "{head}");
+
+    // The stored entry, found the way the store lays it out: objects/<2>/<rest>.
+    let (shard, rest) = head.split_at(2);
+    let entry = repo
+        .path()
+        .join(".dedalo/objects")
+        .join(shard)
+        .join(format!("{rest}.json"));
+    let raw = std::fs::read_to_string(&entry).unwrap();
+    assert!(raw.contains("plan-created"), "{raw}");
+
+    // Rewrite history: claim the round covered more merges than it did.
+    std::fs::write(&entry, raw.replace("\"merges\": 2", "\"merges\": 9")).unwrap();
+
+    dedalo(repo.path())
+        .args(["verify"])
+        .assert()
+        .failure()
+        .stderr(contains("changed after it was written"))
+        .stderr(contains(&head));
+}
+
+/// A ledger written before the chain existed must not be read as empty:
+/// every past round would look unpaid, and a retried job would pay it again.
+#[test]
+fn a_pre_chain_ledger_stops_the_cli_until_it_is_migrated() {
+    let repo = project();
+    let dir = repo.path().join(".dedalo");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("ledger.jsonl"),
+        "{\"event\":\"settled\",\"at\":1,\"plan_id\":\"ded1f643ee0b221a82c5b7fce39c04d0d591\",\
+         \"backend\":\"evm\",\"total\":\"5000\",\"dry_run\":false}\n",
+    )
+    .unwrap();
+
+    dedalo(repo.path())
+        .args(["ledger"])
+        .assert()
+        .failure()
+        .stderr(contains("hash chain"))
+        .stderr(contains("paid again"));
+
+    let migrated = json_of(repo.path(), &["ledger", "--migrate"]);
+    assert_eq!(migrated["migrated"], 1);
+
+    // The old file is kept, not deleted, and the event is now in the chain.
+    assert!(dir.join("ledger.jsonl.migrated").is_file());
+    assert!(!dir.join("ledger.jsonl").exists());
+    let entries = json_of(repo.path(), &["ledger"]);
+    assert_eq!(entries.as_array().unwrap().len(), 1);
+    assert_eq!(
+        entries[0]["plan_id"],
+        "ded1f643ee0b221a82c5b7fce39c04d0d591"
+    );
+
+    // And the settlement it recorded still counts, which is the whole point.
+    let report = json_of(repo.path(), &["verify"]);
+    assert_eq!(report["ok"], false, "the plan it names was never stored");
+}

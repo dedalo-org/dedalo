@@ -62,8 +62,12 @@ pub enum Command {
     #[command(subcommand)]
     Identity(IdentityCommand),
 
-    /// Print the append-only event ledger.
+    /// Print the event ledger.
     Ledger(LedgerArgs),
+
+    /// Recompute the ledger chain and confirm nothing was changed after the
+    /// fact. Anyone with a clone can run it.
+    Verify,
 }
 
 #[derive(Debug, Args)]
@@ -101,7 +105,7 @@ pub struct PlanArgs {
     #[command(flatten)]
     pub range: RangeArgs,
 
-    /// Write the plan to .dedalo/plans and record it in the ledger.
+    /// Store the plan in .dedalo and record it in the ledger.
     #[arg(long)]
     pub save: bool,
 }
@@ -160,4 +164,8 @@ pub struct LedgerArgs {
     /// Show only the last N entries.
     #[arg(long, default_value_t = 20)]
     pub limit: usize,
+
+    /// Convert a pre-chain ledger.jsonl into chain entries, then stop.
+    #[arg(long)]
+    pub migrate: bool,
 }
