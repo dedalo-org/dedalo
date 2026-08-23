@@ -4,8 +4,8 @@
 //! only through the backend configured in `dedalo.toml`.
 
 use anyhow::{Context, Result};
-use dedalo_core::Engine;
 use dedalo_core::settlement::{DryRunSettlement, backend_from_config};
+use dedalo_core::{Engine, SettlementOptions};
 
 use crate::cli::SettleArgs;
 use crate::commands::plan;
@@ -41,7 +41,14 @@ pub async fn run(engine: &Engine, args: &SettleArgs, json: bool) -> Result<()> {
         println!();
     }
 
-    let receipt = engine.settle(&payout, backend.as_ref()).await?;
+    let options = if args.allow_undistributed {
+        SettlementOptions::allowing_undistributed()
+    } else {
+        SettlementOptions::strict()
+    };
+    let receipt = engine
+        .settle_with(&payout, backend.as_ref(), &options)
+        .await?;
 
     if json {
         return crate::commands::print_json(&receipt);

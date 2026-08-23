@@ -49,6 +49,7 @@ pub mod settlement;
 pub mod testing;
 
 pub mod treasury;
+pub mod wallet;
 
 pub use config::Config;
 pub use error::{Error, Result};
@@ -62,6 +63,35 @@ use ledger::{Ledger, LedgerEntry, State};
 use money::Amount;
 use payout::{PlanBuilder, PlanRange};
 use settlement::{Settlement, SettlementReceipt};
+
+/// What a settlement is allowed to do.
+///
+/// Every field here switches off a refusal, so the default — [`SettlementOptions::strict`]
+/// — is the one that says no most often. Loosening it should take a
+/// deliberate flag and a moment's thought.
+#[derive(Debug, Clone, Default)]
+pub struct SettlementOptions {
+    /// Allow settling a round whose contributor pool reached nobody.
+    ///
+    /// Only ever true when the operator has looked at
+    /// [`PayoutPlan::undistributed`] and decided the fees alone are what they
+    /// meant to send.
+    pub allow_undistributed: bool,
+}
+
+impl SettlementOptions {
+    /// Refuse everything refusable. The default.
+    pub fn strict() -> Self {
+        Self::default()
+    }
+
+    /// Permit a round that distributes nothing to contributors.
+    pub fn allowing_undistributed() -> Self {
+        Self {
+            allow_undistributed: true,
+        }
+    }
+}
 
 /// Ties a repository, its config and its ledger together.
 pub struct Engine {
@@ -214,17 +244,75 @@ impl Engine {
     }
 
     /// Settle a plan through `backend`, refusing to pay the same plan twice.
+    ///
+    /// Equivalent to [`Engine::settle_with`] under [`SettlementOptions::strict`],
+    /// which is the only default a payments tool should have.
     pub async fn settle(
         &self,
         plan: &PayoutPlan,
         backend: &dyn Settlement,
     ) -> Result<SettlementReceipt> {
+        self.settle_with(plan, backend, &SettlementOptions::strict())
+            .await
+    }
+
+    /// Settle a plan, with the refusals spelled out.
+    ///
+    /// Every check here answers the same question: is there any reading of
+    /// this plan under which money goes somewhere it cannot come back from?
+    pub async fn settle_with(
+        &self,
+        plan: &PayoutPlan,
+        backend: &dyn Settlement,
+        options: &SettlementOptions,
+    ) -> Result<SettlementReceipt> {
         plan.verify()?;
+
+        let refuse = |reason: String| Error::Settlement {
+            backend: backend.name().to_string(),
+            reason,
+        };
+
+        // Held across the whole of settlement, so the "already settled?" check
+        // below and the record written afterwards cannot be split by a second
+        // process reading between them. A simulation moves nothing and does
+        // not need to exclude anyone.
+        let _lock = if backend.is_dry_run() {
+            None
+        } else {
+            Some(self.ledger.lock()?)
+        };
+
         if !backend.is_dry_run() && self.ledger.is_settled(&plan.id)? {
-            return Err(Error::Settlement {
-                backend: backend.name().to_string(),
-                reason: format!("plan {} was already settled", plan.short_id()),
-            });
+            return Err(refuse(format!(
+                "plan {} was already settled",
+                plan.short_id()
+            )));
+        }
+
+        // The zero address is a valid encoding that nobody holds the key to.
+        // It is the placeholder `dedalo init` writes, so a config that was
+        // never finished reaches here looking perfectly well-formed.
+        for item in plan.payable_items() {
+            if item.wallet.is_zero() {
+                return Err(refuse(format!(
+                    "`{}` is set to the zero address, which destroys anything sent to it; \
+                     set a real address in dedalo.toml",
+                    item.handle
+                )));
+            }
+        }
+
+        // A round where nobody could be paid sends only fees. That is almost
+        // always a missing `dedalo identity link`, not an intention.
+        if !plan.undistributed.is_zero() && !options.allow_undistributed {
+            return Err(refuse(format!(
+                "{} of the contributor pool has no destination, because {} contributor(s) \
+                 earned a share with no wallet on file. Link them, or settle anyway if \
+                 that is really what you mean",
+                self.config.asset.format_amount(plan.undistributed),
+                plan.unresolved.len()
+            )));
         }
 
         // Refuse to start a round the source wallet cannot cover.

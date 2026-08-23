@@ -52,12 +52,12 @@ fn project() -> TempRepo {
     for (handle, wallet, email) in [
         (
             "ada",
-            "0xAda0000000000000000000000000000000000001",
+            "0xada0000000000000000000000000000000000001",
             "ada@example.com",
         ),
         (
             "bea",
-            "0xBea0000000000000000000000000000000000002",
+            "0xbea0000000000000000000000000000000000002",
             "bea@example.com",
         ),
     ] {
@@ -267,7 +267,11 @@ fn linking_an_identity_preserves_the_config_comments() {
         "toml_edit must preserve comments"
     );
     assert!(config.contains("[[identities]]"));
-    assert!(config.contains("0xAda0000000000000000000000000000000000001"));
+    // Stored checksummed, whatever case it was typed in.
+    assert!(
+        config.contains("0xADa0000000000000000000000000000000000001"),
+        "the linked address should be stored in its EIP-55 form:\n{config}"
+    );
 }
 
 #[test]
@@ -279,7 +283,7 @@ fn identity_link_is_idempotent_and_remove_undoes_it() {
             "identity",
             "link",
             "ada",
-            "0xAda0000000000000000000000000000000000001",
+            "0xada0000000000000000000000000000000000001",
             "--email",
             "ada@example.com",
         ])

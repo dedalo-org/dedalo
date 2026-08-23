@@ -64,22 +64,40 @@ The test suite is 66 tests in four layers:
 | --- | --- |
 | unit | the arithmetic, parsing and config, next to the code |
 | property (`proptest`) | the money invariants below, over thousands of generated rounds |
+| **adversarial** | **what the system must refuse — every test is a way money could be lost** |
 | end-to-end | the library against real repositories with real merge commits |
 | CLI | exit codes and the `--json` shape that `action.yml` parses |
+
+`crates/dedalo-core/tests/adversarial.rs` is the one to read first. It asks
+whether Dedalo can be made to compute a *wrong* answer: whether two different
+plans can share an id, whether one account spelled two ways can be paid twice,
+whether a plan id can steer a filesystem path, whether a mistyped address
+survives its checksum. Each test marked `FOUND:` is a regression test for a
+defect that was real here, not a hypothetical.
 
 ### Design guarantees
 
 - **No floating point in money.** Every amount is an integer count of base
-  units. Splits use the largest-remainder method, so a round always sums back
-  to exactly the amount you funded — no dust created, none stranded.
+  units. Splits use the largest-remainder method.
+- **Every base unit is accounted for.** A plan's transfers plus its
+  `undistributed` always equal exactly the amount you funded. Nothing is
+  created, and nothing goes missing — money that has no destination is stated,
+  not dropped.
 - **Fees round down.** Rounding remainders land in the contributor pool, never
   in the protocol's pocket.
-- **One wallet, one transfer.** A contributor with several git emails receives
-  a single payment, so a batch can never double-send.
+- **One wallet, one transfer.** Addresses are compared case-insensitively, so
+  the two EIP-55 spellings of one account are one payee, not two.
+- **Addresses are validated before they are written down.** A mixed-case
+  address is checked against its EIP-55 checksum, which catches essentially
+  every single-character typo — before it becomes an irreversible transfer.
 - **Unpayable contributors are reported, not hidden.** Someone who earned a
   share but has no wallet on file shows up in the plan's `unresolved` list.
-- **Idempotent rounds.** The ledger refuses to settle the same plan twice, so
-  a retried CI job cannot pay twice.
+- **Idempotent rounds.** The ledger refuses to settle the same plan twice, and
+  holds an exclusive lock while doing it, so neither a retry nor a concurrent
+  job can pay twice.
+- **Settlement refuses more than it accepts.** It will not send to the zero
+  address, will not settle a round that reaches nobody, and will not broadcast
+  a plan whose id no longer matches its contents.
 
 ## Install
 
@@ -225,6 +243,15 @@ Each stage is a standalone module, so you can swap any of them:
 | `payout` | `PayoutPlan`, its content hash, and its invariants |
 | `settlement` | `Settlement` trait, dry-run and EVM backends |
 | `ledger` | append-only event log and the payout cursor |
+
+## How funds will move
+
+Nothing broadcasts yet, and the design for when it does is written down in
+[docs/settlement-architecture.md](docs/settlement-architecture.md): a **pull**
+model where a round is deposited once against a Merkle root and contributors
+claim, funded from a **multisig that automation proposes to but cannot sign
+for**, over an address layer that knows about address *formats* rather than
+one chain.
 
 ## Project status
 
