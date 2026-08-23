@@ -14,9 +14,12 @@
 //! 1. a variant on [`AddressKind`];
 //! 2. its name in [`AddressKind::for_chain`], so a config that names that
 //!    chain expects that format;
-//! 3. a branch in [`AddressKind::parse`] that validates and canonicalises;
-//! 4. a branch in [`AddressKind::comparison_key`], which decides when two
+//! 3. a branch in `AddressKind::parse` that validates and canonicalises;
+//! 4. a branch in `AddressKind::comparison_key`, which decides when two
 //!    spellings are the same account.
+//!
+//! The last two are private: they are the guide for someone editing this
+//! file, not API a caller can reach, so they are named rather than linked.
 //!
 //! It is an enum rather than a trait deliberately. A trait with one
 //! implementation is indirection with no payer; an enum with one variant says
