@@ -36,19 +36,32 @@ jobs:
             ci
             chore
             revert
+          # One scope per module under src/, plus the things outside it that
+          # a change can be about. An unlisted scope fails the check, so this
+          # list has to keep up with the layout — it did not, and a
+          # `docs(releasing):` title was rejected for a scope that should
+          # simply have existed.
           scopes: |
             core
             cli
             money
+            payout
             attribution
             git
+            chain
             settlement
+            wallet
+            merkle
+            vault
+            storage
             ledger
             config
-            wallet
             security
+            verification
             docs
+            book
             site
+            action
             ci
             release
           requireScope: false
