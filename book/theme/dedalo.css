@@ -1,0 +1,49 @@
+/* Dedalo handbook — a thin layer over the stock mdBook theme.
+   Only what the content actually needs: the pipeline diagrams are ASCII in
+   <pre> blocks and must not wrap, tables carry a lot of short cells, and the
+   callouts below mark the things a reader must not skim past. */
+
+:root {
+  --dedalo-green: #10743f;
+  --dedalo-amber: #8a5a06;
+  --dedalo-red:   #b60205;
+}
+
+.ayu, .coal, .navy {
+  --dedalo-green: #7dff9b;
+  --dedalo-amber: #ffc255;
+  --dedalo-red:   #ff8a80;
+}
+
+/* Diagrams are drawn with box characters and are meaningless once reflowed. */
+pre > code { white-space: pre; }
+
+/* Reference tables run to many narrow columns; the default centring wastes
+   the width they need. */
+table { width: 100%; margin-inline: 0; }
+table td:first-child { white-space: nowrap; }
+
+/* Callouts are plain blockquotes opening with a bold word — `> **Careful** …`.
+   pulldown-cmark has no attribute lists, so a class-based callout would have
+   had to be raw HTML, and raw HTML stops the markdown inside it from being
+   rendered. A bold lead-in survives both. */
+blockquote {
+  border-inline-start: 3px solid var(--dedalo-amber);
+  padding: 0.5rem 1rem;
+}
+
+/* The status strip on the introduction page. */
+.status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.75rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.7rem 0;
+  border-block: 1px solid var(--table-border-color);
+  margin-block: 1.5rem;
+}
+.status-strip span { opacity: 0.8; }
+.status-strip b { font-weight: 600; color: var(--dedalo-green); }
+.status-strip b.off { color: var(--dedalo-red); }

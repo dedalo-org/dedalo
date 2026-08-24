@@ -56,11 +56,12 @@ the body. [RELEASING.md](RELEASING.md) has the full policy.
   address. Adding arithmetic anywhere changes a recorded count and fails the
   build until someone looks.
 - **Money changes carry tests.** Anything touching `money`, `attribution`,
-  `treasury` or `payout` needs a test proving the amounts still balance —
+  `money::treasury` or `payout` needs a test proving the amounts still balance —
   including the awkward cases: zero weights, a single payee, amounts that do
   not divide evenly. A new rule about what people are paid belongs in
-  `tests/properties.rs`, where generated inputs will try to
-  break it, not only in one example you chose.
+  `src/money/proofs.rs`, `src/payout/proofs.rs` or `tests/adversarial.rs`,
+  where generated and adversarial inputs will try to break it, not only in one
+  example you chose.
 - **CLI output changes carry tests.** `action.yml` parses `--json`; renaming a
   field breaks it silently. `tests/cli.rs` is what catches
   that.
@@ -71,12 +72,18 @@ the body. [RELEASING.md](RELEASING.md) has the full policy.
 
 ## Where things live
 
-`src/lib.rs` documents the pipeline and exposes `Engine`,
-the shortest path through all four stages. From there: `money.rs` (the
-arithmetic), `payout.rs` (the artifact), `treasury.rs` (the fee split). The
-invariants the project guarantees are stated as property tests in
-`tests/properties.rs` — read those before changing anything
-that decides an amount.
+[The handbook](https://dedalo-org.github.io/dedalo/) is the map: the
+[pipeline](https://dedalo-org.github.io/dedalo/concepts/pipeline.html), the
+[invariants](https://dedalo-org.github.io/dedalo/trust/invariants.html), and
+[what is proved rather than tested](https://dedalo-org.github.io/dedalo/trust/verification.html).
+Signatures are on [docs.rs/dedalo](https://docs.rs/dedalo).
+
+In the source: `src/lib.rs` documents the pipeline and exposes `Engine`, the
+shortest path through all four stages. From there `src/money/` (the
+arithmetic), `src/payout/` (the artifact), `src/money/treasury.rs` (the fee
+split). The invariants the project guarantees are stated as property and
+exhaustive tests in `src/money/proofs.rs` and `src/payout/proofs.rs` — read
+those before changing anything that decides an amount.
 
 ## Getting paid
 

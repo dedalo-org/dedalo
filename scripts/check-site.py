@@ -141,7 +141,9 @@ def main() -> int:
     args = parser.parse_args()
 
     errors: list[str] = []
-    pages = sorted(args.root.glob("*.html"))
+    # Recursive: the api/ redirect is a hand-written page too, and a
+    # redirect that quietly acquired a script would defeat the point.
+    pages = sorted(args.root.rglob("*.html"))
     if not pages:
         print(f"{args.root}: no pages found", file=sys.stderr)
         return 1

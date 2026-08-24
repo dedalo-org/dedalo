@@ -1,0 +1,10 @@
+# The handbook is meant to be found. The generated search index and the
+# print page are the same content in a form nobody should land on from a
+# search result.
+User-agent: *
+Allow: /dedalo/
+Disallow: /dedalo/print.html
+Disallow: /dedalo/searchindex.js
+Disallow: /dedalo/searchindex.json
+
+Sitemap: https://dedalo-org.github.io/dedalo/sitemap.xml

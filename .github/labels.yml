@@ -37,6 +37,15 @@
 - name: "area: docs"
   color: 0075ca
   description: README, rustdoc, the published site
+- name: "area: handbook"
+  color: 1d76db
+  description: The mdBook under book/ — the narrative documentation
+- name: "area: chain"
+  color: f9a825
+  description: Wallet, merkle, vault and the Stylus deployable
+- name: "area: ledger"
+  color: bfdadc
+  description: The hash-chained record in .dedalo/
 
 # --- state: where is it in the process? -------------------------------------
 - name: "needs triage"
@@ -55,6 +64,14 @@
   color: 008672
   description: Maintainers would welcome someone picking this up
 
+# --- scope: how big is it? --------------------------------------------------
+- name: epic
+  color: 5319e7
+  description: A body of work tracked by the issues that reference it
+- name: packaging
+  color: bfd4f2
+  description: Distribution — crates.io, binaries, installers, the Action
+
 # --- severity: reserved for anything touching real money --------------------
 - name: "security"
   color: b60205
@@ -62,6 +79,9 @@
 - name: "pays wrong amount"
   color: b60205
   description: Highest priority — a payout is or could be incorrect
+- name: audit
+  color: d93f0b
+  description: Must be reviewed by someone outside this repository before it ships
 
 # --- automation ---------------------------------------------------------------
 # Dependabot applies these itself. They live here so `--prune` adopts them

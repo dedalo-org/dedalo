@@ -4,9 +4,10 @@ on:
   push:
     branches: [main]
     paths:
-      - "src/**"
+      - "book/**"
       - "site/**"
-      - "Cargo.*"
+      - "scripts/check-book.py"
+      - "scripts/check-site.py"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
@@ -17,13 +18,17 @@ concurrency:
 permissions:
   contents: read
 
+# The API reference is not built here any more. docs.rs builds it from the
+# published crate, so the reference a reader sees matches the version they
+# installed rather than whatever main looked like that morning. `/dedalo/api/`
+# stays as a redirect, for the links already out in the world.
+env:
+  MDBOOK_VERSION: "0.5.4"
+
 jobs:
   build:
-    env:
-      # Outranks rust-toolchain.toml, which would otherwise win.
-      RUSTUP_TOOLCHAIN: nightly
     timeout-minutes: 25
-    name: build the site
+    name: build the handbook
     runs-on: ubuntu-latest
     outputs:
       pages-available: ${{ steps.pages.outputs.available }}
@@ -33,47 +38,50 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
         with:
-          toolchain: nightly
+          toolchain: stable
 
-      - name: Build the API reference
+      - name: Install mdBook
         env:
-          # Broken intra-doc links and undocumented public items fail the
-          # build: the reference is generated, so it has to stay correct.
-          RUSTDOCFLAGS: -D warnings --cfg docsrs
-        run: cargo doc --locked --workspace --no-deps --all-features
+          VERSION: ${{ env.MDBOOK_VERSION }}
+        run: |
+          set -euo pipefail
+          # Built from source rather than pulled from a third-party action:
+          # the version is pinned above, and `--locked` builds it against the
+          # dependency set its own release was tested with.
+          cargo install mdbook --locked --version "$VERSION"
+
+      - name: Build the handbook
+        run: mdbook build book
 
       - name: Assemble the published tree
         run: |
           set -eu
           mkdir -p _site
-          # The landing page at /, the API reference at /api/.
+          # The handbook at /, the extra pages over the top of it. site/
+          # deliberately has no index.html: the book renders one.
+          cp -r target/book/. _site/
           cp -r site/. _site/
-          mkdir -p _site/api
-          cp -r target/doc/. _site/api/
-          cat > _site/api/index.html <<'HTML'
-          <!doctype html>
-          <meta charset="utf-8">
-          <title>Dedalo — API reference</title>
-          <meta http-equiv="refresh" content="0; url=dedalo/index.html">
-          <link rel="canonical" href="dedalo/index.html">
-          <p>Redirecting to the <a href="dedalo/index.html">dedalo</a> API reference.</p>
-          HTML
-          # Pages must not run Jekyll over rustdoc's output.
+          # Pages must not run Jekyll over the book's output.
           touch _site/.nojekyll
 
       - name: Check the assembled site
         run: |
           set -euo pipefail
-          # Structure, CSS, metadata and every internal link — resolved
-          # against the tree that is about to be published, so a link to the
-          # API reference is checked against the API reference that exists.
-          # `/dedalo/` serves the reference and nothing else now: the landing
-          # page moved to the organisation's own repository. Links to it are
-          # written as full URLs, which the checker skips as remote.
-          scripts/check-site.py --root site --built _site
-          test -f _site/api/dedalo/index.html
+          # Every internal link and every #anchor, resolved against the tree
+          # that is about to be published — so a cross-chapter link is checked
+          # against the chapter that exists, not the one that was there when
+          # it was written. The sitemap is written from the same tree, because
+          # a hand-maintained one lists the pages somebody remembered to add.
+          python3 scripts/check-book.py --src book/src --built _site \
+            --sitemap _site/sitemap.xml
+          # The hand-written pages: structure, CSS, metadata, and the promise
+          # that they make no external request.
+          python3 scripts/check-site.py --root site --built _site \
+            --external-prefix /dedalo/
+          test -f _site/index.html
+          test -f _site/api/index.html
           test -f _site/sitemap.xml
-          echo "site tree checked and complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "handbook checked and complete" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Is Pages enabled on this repository?
         id: pages
@@ -85,7 +93,7 @@ jobs:
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Pages not enabled::The site was built and checked but not published. Enable it under Settings → Pages with source 'GitHub Actions'; on a private repository that needs a paid plan."
+            echo "::notice title=Pages not enabled::The handbook was built and checked but not published. Enable it under Settings → Pages with source 'GitHub Actions'."
           fi
 
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
@@ -93,10 +101,9 @@ jobs:
         with:
           path: _site
 
-  # GitHub Pages needs the repository to be public, or the account to be on a
-  # paid plan. Until then the site is still built and checked on every push —
-  # which is where the value is — and only publishing is skipped, rather than
-  # leaving a permanently red workflow on main.
+  # Until Pages is enabled the handbook is still built and checked on every
+  # push — which is where the value is — and only publishing is skipped,
+  # rather than leaving a permanently red workflow on main.
   deploy:
     timeout-minutes: 10
     name: deploy to github pages

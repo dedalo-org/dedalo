@@ -22,6 +22,9 @@ exclude = [
   # This project's own funding rules: a real record, but not a consumer's.
   "/dedalo.toml",
   "/scripts",
+  # The handbook is published; it is not something a consumer of the crate
+  # unpacks. docs.rs builds the API reference from the source instead.
+  "/book",
   "/action.yml",
   "/install.sh",
   "/cliff.toml",

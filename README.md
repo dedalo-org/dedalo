@@ -2,7 +2,8 @@
 
 [![CI](https://github.com/dedalo-org/dedalo/actions/workflows/ci.yml/badge.svg)](https://github.com/dedalo-org/dedalo/actions/workflows/ci.yml)
 [![Security](https://github.com/dedalo-org/dedalo/actions/workflows/security.yml/badge.svg)](https://github.com/dedalo-org/dedalo/actions/workflows/security.yml)
-[![docs](https://img.shields.io/badge/docs-api%20reference-blue)](https://dedalo-org.github.io/dedalo/api/)
+[![handbook](https://img.shields.io/badge/docs-handbook-blue)](https://dedalo-org.github.io/dedalo/)
+[![api](https://img.shields.io/badge/api-docs.rs-blue)](https://docs.rs/dedalo)
 [![crates.io](https://img.shields.io/crates/v/dedalo.svg)](https://crates.io/crates/dedalo)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -15,6 +16,11 @@ eliminating bureaucracy and payment friction.
 Everything is derived from **git**: a payout is not a database record someone
 typed in, it is a function of merge history plus a config file that lives in
 the repository. Anyone can recompute a round and get the same numbers.
+
+**📖 [The handbook](https://dedalo-org.github.io/dedalo/)** — how it works, how
+to operate it, and what its guarantees mean.
+**📦 [API reference](https://docs.rs/dedalo)** — generated from the source, per
+released version.
 
 ## The vision
 
@@ -79,7 +85,9 @@ about, so it is written down per module in
 | **exhaustive** | Every value in a complete finite domain was tried. No counterexample exists in that domain. |
 | property | Thousands of generated samples. **Not a proof** — a rare counterexample can survive, and one did. |
 | tests | Hand-picked cases. |
-| exempt | The module decides neither how much money moves nor where it goes. |
+| proofs | The module is not verified; it *is* verification. A `proofs.rs` compiles only under `cfg(test)` and ships in no release. |
+| exempt | The module decides neither how much money moves nor where it goes. Must have zero arithmetic sites, and must not build an address. |
+| binding | A document the code is checked against. |
 
 What is exhaustively proved today:
 
@@ -96,7 +104,8 @@ What is exhaustively proved today:
 
 The vault — the rules a deployed contract enforces, and the one part of this
 system that cannot be patched after it ships — is ordinary Rust in
-`src/chain/vault`, with thirteen tests: one per way it must refuse. `Refusal`
+`src/chain/vault`, with a test per way it must refuse — eleven refusals,
+thirteen tests, because two of them check the refusals themselves. `Refusal`
 is the specification, and a test asserts no two refusals share a sentence.
 
 The **methods table has no `smt` row any more**, and that is a loss worth
@@ -114,11 +123,11 @@ deleted, when the money arithmetic in a module changes count, or when a module
 claiming exemption starts doing arithmetic or building an address. So a new
 module cannot be merged without someone deciding what verifies it.
 
-Two things it deliberately does not claim. `property` is not a proof, and is
-labelled as such. And the contract's **CHC** engine — the one that reasons
-across transactions — does not terminate on `DedaloClaim` within ten minutes,
-so the gate uses BMC; that limit is recorded in `verification.toml` instead of
-being quietly omitted.
+One thing it deliberately does not claim: `property` is not a proof, and is
+labelled as such everywhere it appears. A rare counterexample can survive
+thousands of samples, and one did — the EIP-55 collisions now pinned in
+`tests/adversarial.rs` were found by reasoning about the encoding, not by
+generating inputs.
 
 `tests/adversarial.rs` is the one to read first. It asks whether Dedalo can
 be made to compute a *wrong* answer: whether two different plans can share an
@@ -376,6 +385,11 @@ for item in plan.contributors() {
 }
 ```
 
+Full signatures and types are on [docs.rs/dedalo](https://docs.rs/dedalo);
+[Using the library](https://dedalo-org.github.io/dedalo/reference/library.html)
+in the handbook covers substituting a backend and testing against real
+repositories.
+
 Each stage is a standalone module, so you can swap any of them:
 
 | Module | Responsibility |
@@ -413,7 +427,7 @@ Roadmap, roughly in order:
 - [x] Fee schedule with protocol / treasury / contributor split
 - [x] Append-only ledger with idempotent rounds
 - [ ] Audited distributor contract and EVM broadcasting
-- [ ] GitHub Action wrapper
+- [x] GitHub Action wrapper
 - [ ] Review-weighted attribution (reviewers earn too)
 
 ## Development
@@ -448,7 +462,6 @@ repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 40);
 | MSRV | verified, not asserted: CI builds with exactly the compiler `rust-version` promises |
 | Workflow safety | every third-party action pinned to a commit, with the tag as a trailing comment |
 | Artifact integrity | SHA-256 checksums plus signed build provenance (`gh attestation verify`) |
-| API docs | `.github/workflows/docs.yml` — rustdoc published to GitHub Pages on every push to `main` |
 | Releases | `.github/workflows/release.yml` — tagged builds for five targets, checksums, GitHub release, crates.io |
 | Supply chain | `.github/workflows/security.yml` — `cargo-deny` and `cargo-audit`, weekly and on manifest changes |
 | Dependencies | Dependabot, grouped weekly PRs for Cargo and Actions |
@@ -456,7 +469,8 @@ repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 40);
 | Changelog | generated from Conventional Commit subjects with `git-cliff`; the release notes and `CHANGELOG.md` are the same text |
 | Distribution | install script, `cargo install`, `cargo binstall`, GitHub Action |
 | Branch policy | `.github/rulesets/main.json`, importable in Settings → Rules |
-| Site | `site/` publishes the API reference at [`/dedalo/api/`](https://dedalo-org.github.io/dedalo/api/); the project's own page is at [dedalo-org.github.io](https://dedalo-org.github.io/) |
+| Handbook | `book/` — mdBook, published to [`/dedalo/`](https://dedalo-org.github.io/dedalo/) by `.github/workflows/docs.yml`. `scripts/check-book.py` resolves every link and anchor against the rendered tree |
+| API reference | [docs.rs/dedalo](https://docs.rs/dedalo), built from the published crate — so the reference matches the version someone installed |
 
 Public items must be documented: the crate sets `#![warn(missing_docs)]`
 and CI builds rustdoc with `-D warnings`, so the published API reference
@@ -468,10 +482,13 @@ Dedalo is open source and built by the community. If you care about Rust,
 developer tooling, and sustainable open-source economics, contributions are
 welcome — and, fittingly, they are what the project pays out for.
 
-Start with [CONTRIBUTING.md](CONTRIBUTING.md); `src/lib.rs` documents the
-pipeline end to end and is the clearest map of the architecture. The
-invariants the code guarantees are stated and enforced in
-`tests/properties.rs` and `tests/adversarial.rs`.
+Start with the [handbook](https://dedalo-org.github.io/dedalo/) and
+[CONTRIBUTING.md](CONTRIBUTING.md); `src/lib.rs` documents the pipeline end to
+end and is the clearest map of the architecture. The invariants the code
+guarantees are stated in
+[the handbook](https://dedalo-org.github.io/dedalo/trust/invariants.html) and
+enforced in `src/money/proofs.rs`, `src/payout/proofs.rs` and
+`tests/adversarial.rs`.
 Security issues go through [SECURITY.md](SECURITY.md), never a public issue.
 
 ## License

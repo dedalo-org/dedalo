@@ -1,0 +1,44 @@
+# The Dedalo handbook — the narrative documentation.
+#
+# The API reference is not built here. It is generated from the source by
+# rustdoc and published on docs.rs, which versions it per release; a second
+# copy built from `main` would be a copy that disagrees with the crate people
+# actually installed. Every link to an item goes to docs.rs.
+
+[book]
+title = "The Dedalo Handbook"
+description = "Merge-to-earn funding for open source: how Dedalo turns git merge history into deterministic, auditable contributor payouts."
+authors = ["Dedalo contributors"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "../target/book"
+# A link in SUMMARY.md to a file that does not exist is a broken book, not a
+# request to scaffold one.
+create-missing = false
+
+[output.html]
+default-theme = "ayu"
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/dedalo-org/dedalo"
+git-repository-icon = "fab-github"
+edit-url-template = "https://github.com/dedalo-org/dedalo/edit/main/book/{path}"
+site-url = "/dedalo/"
+cname = ""
+additional-css = ["theme/dedalo.css"]
+no-section-label = false
+
+[output.html.print]
+enable = true
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.search]
+enable = true
+limit-results = 25
+use-boolean-and = true
+boost-title = 2
+boost-hierarchy = 2
