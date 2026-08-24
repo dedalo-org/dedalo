@@ -45,6 +45,36 @@ fix(money): keep dust with contributors when a weight is zero
 refactor(git): move trailer parsing behind the backend trait
 ```
 
+## Cadence
+
+Releases are cut when a milestone closes, not on a calendar. The dates below
+are **targets attached to the milestones**, so the schedule and the work are
+one thing rather than two that drift:
+
+| Version | Milestone | Target | What makes it releasable |
+| --- | --- | --- | --- |
+| `0.1.0` | [first release](https://github.com/dedalo-org/dedalo/milestone/1) | 30 Sep 2026 | The crate on crates.io, the reference on docs.rs, the handbook published. Not new capability — availability. |
+| `0.2.0` | [on-chain settlement](https://github.com/dedalo-org/dedalo/milestone/2) | 31 Jan 2027 | A published independent audit, a deployed claim contract, a multisig with signers who are not one person, and one testnet round settled end to end. |
+| `0.3.0` | [attribution beyond lines](https://github.com/dedalo-org/dedalo/milestone/4) | 30 Apr 2027 | Review-weighted attribution, and a history layer that is not git-shaped. Everything in it changes what people are paid, so all of it is breaking. |
+| `1.0.0` | [a stable promise](https://github.com/dedalo-org/dedalo/milestone/5) | 30 Sep 2027 | At least one project other than this one having run real rounds through it. |
+
+**Patch releases are cut on demand**, whenever a fix matters more than waiting —
+and any fix to an amount matters more than waiting. They do not need a
+milestone.
+
+Three things this cadence is deliberately not:
+
+- **Not time-boxed.** A milestone that is not ready slips. Shipping `0.2.0` on
+  a date with an unaudited contract would be shipping the date, and the date is
+  not what anybody is trusting.
+- **Not a promise of the contents.** An issue can leave a milestone. What the
+  table promises is the *condition*, in the last column, not the issue list.
+- **Not a reason to hold a fix.** Nothing waits for a milestone.
+
+If a target slips, move the milestone's due date and say why in the milestone
+description. A silently overdue milestone is worse than a moved one, because it
+teaches people the dates mean nothing.
+
 ## Cutting a release
 
 1. **Open the release pull request.** Run the **Version** workflow from the
@@ -89,11 +119,24 @@ underneath someone. Pin `@v0.1.0` instead if you want the workflow frozen.
 | Secret / setting | Where | Used by |
 | --- | --- | --- |
 | `CARGO_REGISTRY_TOKEN` | environment `crates-io` | publishing to crates.io |
-| Pages source: *GitHub Actions* | Settings → Pages | the project site and API docs |
+| Pages source: *GitHub Actions* | Settings → Pages | the handbook at `/dedalo/` |
 | `contents: write` for Actions | Settings → Actions | tagging and release creation |
+| `main` ruleset, imported from `.github/rulesets/main.json` | Settings → Rules | squash-only merges, required checks, no force-push |
+| Squash title *PR title*, message *PR body* | Settings → General | the changelog: `git-cliff` reads the commit subject, and `BREAKING CHANGE:` is declared in the pull request body |
 
 `GITHUB_TOKEN` covers the GitHub release and the container registry; no extra
 secret is needed for either.
+
+The API reference needs nothing here: docs.rs builds it from the crate the
+release publishes.
+
+> The two squash settings are load-bearing rather than cosmetic. With the
+> default *commit or PR title*, a single-commit pull request takes its subject
+> from the commit rather than from the title the `pr-title` check validated —
+> so an unconventional subject reaches the changelog unchecked. With the
+> default *commit messages*, the pull request body never reaches the commit,
+> and a `BREAKING CHANGE:` declared there is silently lost from both the
+> changelog and the version bump.
 
 ## Verifying a release
 
