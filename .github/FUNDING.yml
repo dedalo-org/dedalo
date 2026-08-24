@@ -1,0 +1,6 @@
+# The organisation default in dedalo-org/.github names the same collective, and
+# a repository's own file wins over it. This one exists because the inherited
+# default did not render a Sponsor button here — see the note in that file.
+#
+# If it ever does, delete this: two copies of one string is how they drift.
+open_collective: dedalo
