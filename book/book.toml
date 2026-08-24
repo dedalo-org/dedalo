@@ -24,8 +24,10 @@ preferred-dark-theme = "ayu"
 git-repository-url = "https://github.com/dedalo-org/dedalo"
 git-repository-icon = "fab-github"
 edit-url-template = "https://github.com/dedalo-org/dedalo/edit/main/book/{path}"
+# A project page is served under /<repo>/. mdBook uses this for the 404
+# page, which is reached from any depth and therefore needs absolute
+# asset paths.
 site-url = "/dedalo/"
-cname = ""
 additional-css = ["theme/dedalo.css"]
 no-section-label = false
 
