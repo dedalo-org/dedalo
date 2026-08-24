@@ -1,17 +1,36 @@
+# Every path here is checked by the `main` ruleset, which requires a code
+# owner's review. A path that no longer exists silently reviews nothing — the
+# `*` line still catches it, but the intent below stops being expressed.
+
 # Default: any change needs a maintainer's eyes.
 *                                   @4137314
 
-# Code that decides how much money moves. Review these lines as if funds
-# depended on them, because they do.
-/src/money.rs                       @4137314
-/src/treasury.rs                    @4137314
-/src/payout.rs                      @4137314
-/src/wallet.rs                      @4137314
-/src/settlement/                    @4137314
-/src/ledger.rs                      @4137314
+# Code that decides how much money moves. Review these as if funds depended on
+# them, because they do — and every one of them is named in the invariants at
+# https://dedalo-org.github.io/dedalo/trust/invariants.html
+/src/money/                         @4137314
+/src/payout/                        @4137314
+/src/attribution/                   @4137314
+/src/chain/                         @4137314
+/src/storage/ledger.rs              @4137314
+
+# What is verified, and how. The gate in tests/verification_manifest.rs reads
+# this file, so weakening a claim here weakens the build.
+/verification.toml                  @4137314
+/tests/adversarial.rs               @4137314
+/tests/verification_manifest.rs     @4137314
+
+# Decisions the code is checked against rather than the other way round.
+/docs/settlement-architecture.md    @4137314
 
 # Anything that can publish, sign, or ship a binary.
 /.github/workflows/                 @4137314
+/.github/rulesets/                  @4137314
 /action.yml                         @4137314
 /install.sh                         @4137314
 /SECURITY.md                        @4137314
+/Cargo.toml                         @4137314
+
+# The funding rules this project runs on itself. A public record.
+/dedalo.toml                        @4137314
+/FUNDING.yml                        @4137314
