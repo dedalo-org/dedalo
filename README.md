@@ -369,7 +369,7 @@ async runtime the CLI needs:
 
 ```toml
 [dependencies]
-dedalo = { version = "0.1", default-features = false }
+dedalo = { version = "0.0.1", default-features = false }
 ```
 
 ```rust
