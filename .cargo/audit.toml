@@ -1,0 +1,7 @@
+# Keep cargo-audit in sync with deny.toml advisory exceptions.
+# cargo-audit does not read deny.toml.
+[advisories]
+ignore = [
+    # unmaintained proc macro, transitive through alloy-sol-types, not in shipped artifacts
+    "RUSTSEC-2024-0436",
+]
