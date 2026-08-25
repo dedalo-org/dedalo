@@ -275,29 +275,18 @@ jobs:
       # fails if one is missing, if a declared proof's test is gone, if the
       # money arithmetic in a module moved, or if an exemption stopped being
       # true. It is the gate that makes the manifest mean something.
+      #
+      # Here it passes over an empty manifest, because `main` is the 0.0.0
+      # placeholder and carries no modules. It is kept wired up because what
+      # it exists to catch — a module arriving with nobody having decided how
+      # it is verified — is likeliest on the day the code comes back.
       - name: every module is accounted for
         run: cargo test --locked --all-features --test verification_manifest
 
-      # Proofs by exhaustion: fifty million fee schedules, every basis-point
-      # value, every small weight vector, every tree shape up to sixty-four.
-      # Release mode is the difference between half a minute and ten.
-      - name: exhaustive proofs
-        run: cargo test --locked --release --all-features -- --ignored
-
-      - name: Install the wasm target and brotli
-        run: |
-          set -euo pipefail
-          rustup target add wasm32-unknown-unknown
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends brotli
-
-      # The vault compiles to WebAssembly for Arbitrum Stylus, which rejects
-      # anything over twenty-four kilobytes compressed. A contract that cannot
-      # be deployed is not a contract, so the size is measured rather than
-      # assumed — and it is the compressed size, which nobody eyeballs from
-      # the source.
-      - name: deployable stays deployable
-        run: scripts/check-contract.py
+      # Two steps used to follow: the exhaustive proofs, and the deployable's
+      # compressed size against the limit Stylus enforces. Both are on `v0.1`
+      # with the code they measure. They are absent here rather than vacuous —
+      # a gate reporting "pass" over nothing is worse than one visibly missing.
 
   # A single gate for branch protection, so adding a job above does not
   # require reconfiguring the repository.
