@@ -319,7 +319,7 @@ dependencies = [
 
 [[package]]
 name = "dedalo"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "alloy-sol-types",
  "async-trait",

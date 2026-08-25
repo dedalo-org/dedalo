@@ -12,7 +12,7 @@ the thing, not the shape of every function.
 
 ```toml
 [dependencies]
-dedalo = { version = "0.1", default-features = false }
+dedalo = { version = "0.0.1", default-features = false }
 ```
 
 `default-features = false` drops the `cli` feature, and with it `clap`,
@@ -115,7 +115,7 @@ which is why nothing in this project mocks git:
 
 ```toml
 [dev-dependencies]
-dedalo = { version = "0.1", features = ["testing"] }
+dedalo = { version = "0.0.1", features = ["testing"] }
 ```
 
 ```rust,ignore

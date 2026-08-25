@@ -19,15 +19,21 @@ tracker][issues]. This page is the shape of it.
       vectors, and every tree shape to 64 claims
 - [x] The verification manifest gate
 
-## v0.1.0 — first release
+## v0.0.1 — the first release that carries code
 
 Publishing the crate, and being honest in the process about what it does and
 does not do.
 
-The pipeline works and is tested end to end. What v0.1.0 adds is not capability
-but **availability**: a crate on crates.io, an API reference on docs.rs, this
-handbook, and documentation good enough that somebody can decide whether to
-trust it without reading the source.
+`0.0.0` is already on crates.io, and it holds nothing but the name: no library
+surface, no dependencies, and a binary that prints where the code is. It went
+out early because a name on crates.io is first-come, and a version can be
+yanked but never withdrawn — so the number that carries the pipeline should be
+one somebody can rely on, not one published in a hurry to claim a word.
+
+The pipeline works and is tested end to end. What `0.0.1` adds is not
+capability but **availability**: a crate on crates.io, an API reference on
+docs.rs, this handbook, and documentation good enough that somebody can decide
+whether to trust it without reading the source.
 
 ## v0.2.0 — on-chain settlement
 

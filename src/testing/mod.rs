@@ -8,7 +8,7 @@
 //!
 //! ```toml
 //! [dev-dependencies]
-//! dedalo = { version = "0.1", features = ["testing"] }
+//! dedalo = { version = "0.0.1", features = ["testing"] }
 //! ```
 //!
 //! ```no_run
