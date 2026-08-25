@@ -7,6 +7,17 @@
 [![crates.io](https://img.shields.io/crates/v/dedalo.svg)](https://crates.io/crates/dedalo)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
+> **`dedalo 0.0.0` on crates.io is a placeholder.** It holds the name and ships
+> no functionality: no library surface, no dependencies, and a binary whose
+> only job is to say where the tool is.
+>
+> Everything below describes what is on the [**`v0.1`**](https://github.com/dedalo-org/dedalo/tree/v0.1) branch, which is
+> where the work happens. It reaches crates.io as `0.0.1` once it is stable
+> enough to be worth installing. A published version can be yanked but never
+> withdrawn, so the first number that carries code should be one someone can
+> rely on — and a payout tool that half-works is worse than one that is
+> honestly empty.
+
 > Turn code merges into sustainable open-source funding.
 
 Dedalo is autonomous financial infrastructure for open-source workflows. It
@@ -166,6 +177,22 @@ to be the claim in this README rather than the code.
 
 ## Install
 
+**Not yet.** `cargo install dedalo` resolves to `0.0.0`, the placeholder, and
+gives you a binary that prints a URL. There are no releases and nothing to
+download.
+
+To run what exists today, build the branch:
+
+```bash
+git clone --branch v0.1 https://github.com/dedalo-org/dedalo
+cd dedalo
+cargo run -- --help
+```
+
+From `0.0.1` onward, these are the ways in — and CI already exercises all of
+them against the placeholder, so the path is tested before there is anything
+to distribute:
+
 ```bash
 # script — verifies the published SHA-256 before installing
 curl -fsSL https://raw.githubusercontent.com/dedalo-org/dedalo/main/install.sh | sh
@@ -174,7 +201,7 @@ cargo install dedalo --locked      # from source
 cargo binstall dedalo              # prebuilt, no compile
 ```
 
-Windows builds are published as `.zip` on the
+Windows builds will be published as `.zip` on the
 [releases page](https://github.com/dedalo-org/dedalo/releases).
 
 ### In CI
@@ -192,6 +219,10 @@ merged the code:
     command: plan
     amount: "1000"
 ```
+
+There is no `v0` tag yet — the first one is cut with `0.0.1`. Until then the
+Action runs only from a branch reference, and only `v0.1` carries a binary for
+it to install.
 
 It defaults to a simulation, because the safe thing should be the default —
 and nothing else is available: **Dedalo holds no signing key.** A round is
@@ -305,10 +336,10 @@ Three things this buys, each of which was a hole in the obvious design:
 - **A key in CI cannot drain the treasury**, because there is no key in CI.
   Everything with write access to a workflow would have been able to reach it.
 
-The vault is Rust. The rules live in [`src/chain/vault`](src/chain/vault),
+The vault is Rust. The rules live in [`src/chain/vault`](https://github.com/dedalo-org/dedalo/tree/v0.1/src/chain/vault),
 where they are pure — no storage, no clock, no caller — and therefore testable
 over their whole domain rather than by deploying them somewhere and poking
-them. The deployable at [`src/chain/contract`](src/chain/contract) is an
+them. The deployable at [`src/chain/contract`](https://github.com/dedalo-org/dedalo/tree/v0.1/src/chain/contract) is an
 [Arbitrum Stylus](https://arbitrum.io/stylus) crate that compiles to
 WebAssembly, and is deliberately thin: reading storage, moving a token, and
 knowing the time. A reader checking whether it is correct should end up in
@@ -369,7 +400,15 @@ async runtime the CLI needs:
 
 ```toml
 [dependencies]
-dedalo = { version = "0.1", default-features = false }
+dedalo = { version = "0.0.1", default-features = false }   # once published
+```
+
+`0.0.0` has no library surface at all, so a dependency on it compiles and gives
+you nothing. Until `0.0.1` exists, depend on the branch:
+
+```toml
+[dependencies]
+dedalo = { git = "https://github.com/dedalo-org/dedalo", branch = "v0.1", default-features = false }
 ```
 
 ```rust
@@ -413,7 +452,20 @@ one chain.
 
 ## Project status
 
-Early. The pipeline from git history to a verified, reproducible payout plan
+Early, and split across two branches on purpose:
+
+| Branch | What it is |
+| --- | --- |
+| [`v0.1`](https://github.com/dedalo-org/dedalo/tree/v0.1) | the code — the pipeline, the vault, the handbook's subject |
+| `main` | the `0.0.0` placeholder that holds the name on crates.io |
+
+`0.0.0` exists so that nobody else can take `dedalo` while it is being built,
+and for no other reason. `0.0.1` is the first release that will carry code, cut
+from `v0.1` once the pipeline is stable enough that someone installing it gets
+what this page describes. Both branches are protected the same way: pull
+requests, squash merges, no force-pushes.
+
+The pipeline from git history to a verified, reproducible payout plan
 is implemented and tested end to end. **On-chain broadcasting is not live
 yet**: the `evm` backend validates the configuration and builds the exact
 distributor call a plan translates into, then stops before signing — shipping
@@ -432,8 +484,9 @@ Roadmap, roughly in order:
 
 ## Development
 
-`rustup` picks up the compiler pinned in `rust-toolchain.toml` as soon as you
-enter the repository, so the toolchain is the same one CI uses:
+Work happens on `v0.1`; `main` has nothing to build. `rustup` picks up the
+compiler pinned in `rust-toolchain.toml` as soon as you enter the repository,
+so the toolchain is the same one CI uses:
 
 ```bash
 cargo test --workspace --all-features
@@ -468,7 +521,7 @@ repo.merge_feature("feature-a", ("Ada", "ada@example.com"), 40);
 | Versioning | one version and one tag, bumped by a reviewable release pull request — see [RELEASING.md](RELEASING.md) |
 | Changelog | generated from Conventional Commit subjects with `git-cliff`; the release notes and `CHANGELOG.md` are the same text |
 | Distribution | install script, `cargo install`, `cargo binstall`, GitHub Action |
-| Branch policy | `.github/rulesets/main.json`, importable in Settings → Rules |
+| Branch policy | `.github/rulesets/main.json` and `v0.1.json`, importable in Settings → Rules |
 | Handbook | `book/` — mdBook, published to [`/dedalo/`](https://dedalo-org.github.io/dedalo/) by `.github/workflows/docs.yml`. `scripts/check-book.py` resolves every link and anchor against the rendered tree |
 | API reference | [docs.rs/dedalo](https://docs.rs/dedalo), built from the published crate — so the reference matches the version someone installed |
 
@@ -482,9 +535,13 @@ Dedalo is open source and built by the community. If you care about Rust,
 developer tooling, and sustainable open-source economics, contributions are
 welcome — and, fittingly, they are what the project pays out for.
 
-Start with the [handbook](https://dedalo-org.github.io/dedalo/) and
-[CONTRIBUTING.md](CONTRIBUTING.md); `src/lib.rs` documents the pipeline end to
-end and is the clearest map of the architecture. The invariants the code
+Branch from [`v0.1`](https://github.com/dedalo-org/dedalo/tree/v0.1), not from
+`main` — `main` carries the placeholder and nothing to change. Start with the
+[handbook](https://dedalo-org.github.io/dedalo/) and
+[CONTRIBUTING.md](CONTRIBUTING.md);
+[`src/lib.rs`](https://github.com/dedalo-org/dedalo/blob/v0.1/src/lib.rs)
+documents the pipeline end to end and is the clearest map of the
+architecture. The invariants the code
 guarantees are stated in
 [the handbook](https://dedalo-org.github.io/dedalo/trust/invariants.html) and
 enforced in `src/money/proofs.rs`, `src/payout/proofs.rs` and

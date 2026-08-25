@@ -1,9 +1,29 @@
-//! `dedalo` — merge-to-earn funding for open source.
+//! The `dedalo` binary, for the placeholder release.
 //!
-//! The whole binary is [`dedalo::cli`]: keeping it in the library means the
-//! command surface compiles under the same lints and is reachable from the
-//! crate's own tests.
+//! `0.0.0` ships a binary at all so that the distribution path — the release
+//! archives, `cargo install`, `cargo binstall` and `install.sh` — is exercised
+//! by CI before there is anything worth distributing. It answers `--version`,
+//! and otherwise says where the tool actually is.
 
-fn main() -> std::process::ExitCode {
-    dedalo::cli::main()
+fn main() {
+    let version = env!("CARGO_PKG_VERSION");
+
+    if std::env::args()
+        .skip(1)
+        .any(|arg| arg == "--version" || arg == "-V")
+    {
+        println!("dedalo {version}");
+        return;
+    }
+
+    println!(
+        "dedalo {version} is a placeholder. It reserves the name on crates.io \
+         and does nothing else.\n\
+         \n\
+         The tool is being built on the v0.1 branch:\n\
+         \n    \
+         https://github.com/dedalo-org/dedalo/tree/v0.1\n\
+         \n\
+         The first release that carries code will be 0.0.1."
+    );
 }

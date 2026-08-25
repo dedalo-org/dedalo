@@ -1,7 +1,7 @@
 [package]
 name = "dedalo"
-description = "Merge-to-earn funding for open source: turn git merges into deterministic contributor payouts."
-version = "0.1.0"
+description = "Merge-to-earn funding for open source: turn git merges into deterministic contributor payouts. 0.0.0 is a name reservation and ships no functionality."
+version = "0.0.0"
 edition = "2024"
 rust-version = "1.90.0"
 license = "MIT"
@@ -14,11 +14,12 @@ keywords = ["git", "funding", "payouts", "open-source", "web3"]
 categories = ["command-line-utilities", "development-tools"]
 
 # The published archive carries what someone building or auditing the crate
-# needs, and nothing that only serves the repository.
+# needs, and nothing that only serves the repository. The list is longer than
+# the placeholder warrants because it is the list the real crate ships with,
+# and a release should not have to rediscover it.
 exclude = [
   "/.github",
   "/site",
-  "/.dedalo",
   # This project's own funding rules: a real record, but not a consumer's.
   "/dedalo.toml",
   "/scripts",
@@ -30,66 +31,22 @@ exclude = [
   "/cliff.toml",
   "/deny.toml",
   "/taplo.toml",
-  # The contract source ships; its build output does not.
-  "/src/chain/contract/target",
 ]
-
-[features]
-default = ["cli"]
-
-# The command-line interface, and the runtime and argument parsing it needs.
-# A library consumer turns this off — `default-features = false` — and pulls
-# in none of it.
-cli = ["dep:anyhow", "dep:clap", "dep:toml_edit", "dep:tokio", "dep:tracing-subscriber", "dep:libc"]
-
-# Exposes `dedalo::testing`, a harness for building throwaway repositories
-# with real merge history. Off by default so it never ships in a normal build.
-testing = []
 
 [[bin]]
 name = "dedalo"
 path = "src/main.rs"
-required-features = ["cli"]
 
 [dependencies]
-# The library.
-# The ABI encoder the rest of the Rust-Ethereum ecosystem uses. Preferred over
-# encoding by hand because the two alignment rules the ABI has are exactly the
-# detail a hand-rolled encoder gets right until somebody edits it. Pinned to
-# what the vault contract carries, so one version of the types exists.
-alloy-sol-types = { version = "1.5.7", default-features = false }
-async-trait = "0.1"
-hex = "0.4"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sha2 = "0.10"
-sha3 = "0.10"
-thiserror = "2"
-toml = "0.9"
-tracing = "0.1"
-
-# The CLI, behind the `cli` feature.
-anyhow = { version = "1", optional = true }
-clap = { version = "4", features = ["derive", "env"], optional = true }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"], optional = true }
-toml_edit = { version = "0.23", optional = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
-
-[target.'cfg(unix)'.dependencies]
-libc = { version = "0.2", optional = true }
+# None. A placeholder that pulls in a dependency tree is a placeholder that
+# can break someone's build, and this one has nothing to break it for.
 
 [dev-dependencies]
-# The integration tests need the `testing` harness, which a normal build must
-# not ship. A crate may depend on itself for dev only, which is what turns the
-# feature on for tests without turning it on for consumers.
-dedalo = { path = ".", features = ["testing"] }
-assert_cmd = "2"
-predicates = "3"
-proptest = "1"
-# The adversarial suite implements EIP-55 a second time, so the property
-# compares this crate against the specification rather than against itself.
-sha3 = "0.10"
-tempfile = "3"
+# Only what `tests/verification_manifest.rs` needs to read `verification.toml`.
+# The gate outlives the code it was written for: it is what fails the build if
+# a module appears here without someone deciding how it is verified.
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"
 
 [package.metadata.docs.rs]
 all-features = true
