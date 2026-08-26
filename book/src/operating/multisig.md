@@ -117,10 +117,10 @@ says: `Error::NotImplemented`.
 
 The vault's rules are pure Rust, driven over their whole domain by tests rather
 than by deploying them somewhere and poking them. The deployable binds them to
-Arbitrum Stylus and does nothing else.
+Solana and does nothing else.
 
 That is worth something. **It is not an audit.** Nobody outside the repository
-has looked at it, it has never held a coin, and the reentrancy, ERC-20 and
+has looked at it, it has never held a coin, and the reentrancy, SPL token and
 expiry paths have been reasoned about by their author and tested by their
 author.
 

@@ -57,13 +57,19 @@ detectable rather than merely possible to detect.
 **Attack.** A contributor's address is changed — in a pull request to
 `dedalo.toml`, or in transit before the maintainer pastes it.
 
-**What stops it, partly.** EIP-55 validation catches *typos*, and
-`identity link` reports [how many bits that check is worth][bits] rather than
-implying it is absolute.
+**What stops it, barely.** Less than it used to. A Solana address carries **no
+checksum**, so a typo is caught only when it changes the decoded length;
+`identity link` reports [that the check is worth nothing][bits] rather than
+implying otherwise. What it does refuse is an address nobody can sign for —
+off-curve, and therefore not a wallet.
 
-**What does not stop it.** A checksummed address is a *valid* address, not a
+**What does not stop it.** A well-formed address is a *valid* address, not a
 *correct* one. An attacker substituting a valid address of their own passes
-every check Dedalo makes.
+every check Dedalo makes, and on this chain a careless typo does too.
+
+**What limits the damage.** The pull model: a round is claimed, not sent, so a
+share nobody can claim stays in the round until it expires rather than being
+transferred somewhere unrecoverable. That is recovery, not prevention.
 
 **Mitigation, which is procedural:** the change to `dedalo.toml` is a reviewed
 commit with an author, and the address should be confirmed with the contributor
@@ -170,5 +176,5 @@ Anything where an amount is or could be wrong goes through
 credit assigned to the wrong person. See
 [Reporting a vulnerability](security.md).
 
-[bits]: ../concepts/identities.md#how-strong-is-the-checksum
+[bits]: ../concepts/identities.md#there-is-no-checksum
 [sec]: https://github.com/dedalo-org/dedalo/blob/main/SECURITY.md

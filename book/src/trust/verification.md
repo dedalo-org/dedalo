@@ -84,8 +84,10 @@ the claim in the README rather than the code.
 
 **`property` is not a proof.** It is labelled as such everywhere it appears. A
 rare counterexample can survive thousands of samples, and one did: the EIP-55
-collisions now pinned in `tests/adversarial.rs` were found by reasoning about
-the encoding, not by generating inputs.
+collisions that used to be pinned in `tests/adversarial.rs` were found by
+reasoning about the encoding, not by generating inputs. That chain is gone, and
+the lesson is not — the address suite now compares against an independent
+base58 decoder in both directions rather than against itself.
 
 **There is no `smt` row any more, and that is a loss worth naming.** The
 previous vault was Solidity, and `solc --model-checker-engine bmc` discharged

@@ -31,9 +31,10 @@ commit's score when `split_with_co_authors` is on.
 **Dry-run** — the default settlement backend. Computes and verifies everything
 a real settlement would, and moves nothing.
 
-**EIP-55** — the Ethereum address checksum, encoded in the **capitalisation of
-the hex letters**. Digits carry no checksum, so an address's protection depends
-on how many letters it has. → [How strong is the checksum](concepts/identities.md#how-strong-is-the-checksum)
+**base58** — how a Solana address is written: thirty-two bytes in an alphabet
+that leaves out `0`, `O`, `I` and `l` because they are misread. It carries **no
+checksum**, so every thirty-two byte value is a valid address.
+→ [There is no checksum](concepts/identities.md#there-is-no-checksum)
 
 **Engine** — the type tying a repository, its config and its ledger together.
 The shortest path through all four pipeline stages.
@@ -95,8 +96,14 @@ settlement.
 **Settlement** — the fourth stage, and the only one with side effects.
 → [Settlement](concepts/settlement.md)
 
-**Stylus** — Arbitrum's WebAssembly smart-contract environment. What the
-deployable compiles to, under a hard 24 KiB compressed limit.
+**On-curve** — whether an address is a point on ed25519, and therefore a
+keypair's public key that somebody can sign for. A program-derived address is
+deliberately not, and so is every associated token account. A contributor's
+wallet must be on-curve; a treasury or a multisig vault legitimately is not.
+→ [A wallet must be something somebody can sign for](concepts/identities.md#a-wallet-must-be-something-somebody-can-sign-for)
+
+**PDA** — a program-derived address: an address off the ed25519 curve, which no
+keypair can produce a signature for, so only its program can act on it.
 
 **Treasury** — the project's own reserve, funded by `treasury_bps` of every
 round.

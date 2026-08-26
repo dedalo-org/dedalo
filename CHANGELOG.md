@@ -10,11 +10,6 @@ Both crates in the workspace share one version and one tag.
 
 ## Unreleased
 
-Everything under this heading is on the
-[`v0.1`](https://github.com/dedalo-org/dedalo/tree/v0.1) branch, not on `main`.
-`main` carries the `0.0.0` placeholder described below, and `0.0.1` will be the
-first release that ships any of it.
-
 ### Added
 
 - **core**: the git → attribution → payout plan → settlement pipeline, with the
@@ -41,15 +36,18 @@ The name, and nothing else.
 
 ### Added
 
-- **crate**: a placeholder published to crates.io so that `dedalo` cannot be
-  taken while the tool is being built. It has no library surface and no
-  dependencies; the binary answers `--version` and otherwise prints where the
-  code is.
+- **crate**: a placeholder published to crates.io so that `dedalo` could not be
+  taken while the tool was being built. It had no library surface and no
+  dependencies; the binary answered `--version` and otherwise printed where the
+  code was.
 
 ### Notes
 
-- Nothing here computes, moves or records money. The pipeline, the vault and
-  the ledger are on the `v0.1` branch and reach crates.io as `0.0.1`.
-- Publishing an empty version rather than the work in progress is deliberate.
+- Nothing in it computed, moved or recorded money.
+- Publishing an empty version rather than the work in progress was deliberate.
   A version can be yanked but never withdrawn, so the first number that carries
-  code should be one someone can rely on.
+  code should be one somebody can rely on. That number is `0.0.1`.
+- It was cut from a branch that no longer exists. For six days `main` held the
+  placeholder and the code lived on `v0.1`; the arrangement cost more than it
+  bought — `Closes #N` never fired, `cargo install --git` installed a binary
+  with no subcommands — and the code came back to `main`.

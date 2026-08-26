@@ -22,7 +22,7 @@ push — is in [In CI](../operating/ci.md). This page is the interface.
 
 | Input | Default | Meaning |
 | --- | --- | --- |
-| `version` | `latest` | Release to use, e.g. `v0.1.0`. |
+| `version` | `latest` | Release to use, e.g. `v0.0.1`. |
 | `command` | `status` | `status`, `scan`, `contributors`, `plan` or `settle`. |
 | `amount` | `""` | Size of the round, for `plan` and `settle`, in the configured asset. |
 | `since` | `""` | Start after this revision instead of the last settled commit. |

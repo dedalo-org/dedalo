@@ -81,18 +81,18 @@ already have downloaded it.
 `v0` — and `v1` after it — follows the latest release, because
 `uses: dedalo-org/dedalo@v0` is how a GitHub Action is consumed. It is a pointer
 to an immutable release tag, so nothing that was published ever changes
-underneath anybody. Pin `@v0.1.0` to freeze a workflow.
+underneath anybody. Pin `@v0.0.1` to freeze a workflow.
 
 ## Verifying a release
 
 Anyone can check a published binary against what the tag claims:
 
 ```bash
-curl -fsSL https://github.com/dedalo-org/dedalo/releases/download/v0.1.0/dedalo-v0.1.0-x86_64-unknown-linux-gnu.tar.gz.sha256
-sha256sum dedalo-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
+curl -fsSL https://github.com/dedalo-org/dedalo/releases/download/v0.0.1/dedalo-v0.0.1-x86_64-unknown-linux-gnu.tar.gz.sha256
+sha256sum dedalo-v0.0.1-x86_64-unknown-linux-gnu.tar.gz
 
 # Or the signed provenance, which also proves which workflow built it
-gh attestation verify dedalo-v0.1.0-x86_64-unknown-linux-gnu.tar.gz --repo dedalo-org/dedalo
+gh attestation verify dedalo-v0.0.1-x86_64-unknown-linux-gnu.tar.gz --repo dedalo-org/dedalo
 ```
 
 Or rebuild it:

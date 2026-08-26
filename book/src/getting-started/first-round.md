@@ -34,7 +34,7 @@ warning: EIP-55 checksum carries 7 bits for this address
 
 That warning is not boilerplate. EIP-55 hides its checksum in the
 capitalisation of the hex **letters**, so an address with few letters carries
-few bits. See [Identities and wallets](../concepts/identities.md#how-strong-is-the-checksum).
+few bits. See [Identities and wallets](../concepts/identities.md#there-is-no-checksum).
 
 ## Find who is still missing
 

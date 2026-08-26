@@ -12,7 +12,7 @@ the thing, not the shape of every function.
 
 ```toml
 [dependencies]
-dedalo = { version = "0.1", default-features = false }
+dedalo = { version = "0.0.1", default-features = false }
 ```
 
 `default-features = false` drops the `cli` feature, and with it `clap`,
@@ -105,7 +105,7 @@ process. The contract is narrow on purpose: a settlement re-verifies the plan
 before acting, and returns a receipt or an error.
 
 > **Careful** — if you implement this, do not return a receipt for something
-> that did not happen. The shipped `evm` backend returns `NotImplemented`
+> that did not happen. The shipped `solana` backend returns `NotImplemented`
 > rather than a plausible-looking success, and that is the standard to hold.
 
 ## Testing against real repositories
@@ -115,7 +115,7 @@ which is why nothing in this project mocks git:
 
 ```toml
 [dev-dependencies]
-dedalo = { version = "0.1", features = ["testing"] }
+dedalo = { version = "0.0.1", features = ["testing"] }
 ```
 
 ```rust,ignore

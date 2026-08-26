@@ -275,18 +275,25 @@ jobs:
       # fails if one is missing, if a declared proof's test is gone, if the
       # money arithmetic in a module moved, or if an exemption stopped being
       # true. It is the gate that makes the manifest mean something.
-      #
-      # Here it passes over an empty manifest, because `main` is the 0.0.0
-      # placeholder and carries no modules. It is kept wired up because what
-      # it exists to catch — a module arriving with nobody having decided how
-      # it is verified — is likeliest on the day the code comes back.
       - name: every module is accounted for
         run: cargo test --locked --all-features --test verification_manifest
 
-      # Two steps used to follow: the exhaustive proofs, and the deployable's
-      # compressed size against the limit Stylus enforces. Both are on `v0.1`
-      # with the code they measure. They are absent here rather than vacuous —
-      # a gate reporting "pass" over nothing is worse than one visibly missing.
+      # Proofs by exhaustion: fifty million fee schedules, every basis-point
+      # value, every small weight vector, every tree shape up to sixty-four.
+      # Release mode is the difference between half a minute and ten.
+      - name: exhaustive proofs
+        run: cargo test --locked --release --all-features -- --ignored
+
+      # A "deployable stays deployable" step used to follow, measuring the
+      # Stylus contract against the 24 KiB Arbitrum compresses it to. Both are
+      # gone: the chain is Solana, and the claim program that replaces the
+      # binding is not written. `chain::vault` still holds every rule it must
+      # enforce, so what is missing is a binding, not a specification.
+      #
+      # The step is absent rather than passing over nothing. A gate reporting
+      # "pass" for an artifact that does not exist is worse than one visibly
+      # missing, and `verification.toml` keeps an empty [contracts] table so a
+      # program cannot reappear without someone declaring how it is measured.
 
   # A single gate for branch protection, so adding a job above does not
   # require reconfiguring the repository.
