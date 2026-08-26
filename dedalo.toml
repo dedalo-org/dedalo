@@ -9,6 +9,7 @@ repository = "https://github.com/dedalo-org/dedalo"
 open_collective = "dedalo"
 
 [git]
+lands_as = "commits"
 # Merges into this branch are what earn a payout.
 branch = "main"
 # Merges whose subject starts with one of these are skipped entirely.
