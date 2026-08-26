@@ -77,7 +77,7 @@ subscriber:
 
 ```toml
 [dependencies]
-dedalo = { version = "0.1", default-features = false }
+dedalo = { version = "0.0.1", default-features = false }
 ```
 
 See [Using the library](../reference/library.md).

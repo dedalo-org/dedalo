@@ -31,15 +31,49 @@ open_collective = "my-project"
 ```toml
 [git]
 branch = "main"
+lands_as = "merges"
 ignore_subjects = ["chore(release)", "Merge branch"]
 ignore_emails = ["noreply@github.com", "actions@github.com"]
 ```
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `branch` | `"main"` | Merges into this branch are what earn a payout. |
-| `ignore_subjects` | `[]` | Merges whose subject **starts with** one of these are skipped entirely. |
+| `branch` | `"main"` | Changes landing on this branch are what earn a payout. |
+| `lands_as` | `"merges"` | What a landed change looks like here: `"merges"` (a merge commit) or `"commits"` (every commit on the branch's first-parent line). |
+| `ignore_subjects` | `[]` | Changes whose subject **starts with** one of these are skipped entirely. |
 | `ignore_emails` | `["noreply@github.com", "actions@github.com"]` | Emails that never receive a payout, however much they commit. |
+
+### `lands_as`, and why it is not detected for you
+
+GitHub offers three ways to land a pull request and **only one of them makes a
+merge commit**:
+
+| Merge method | Merge commit | `lands_as = "merges"` sees it |
+| --- | --- | --- |
+| Create a merge commit | yes | yes |
+| Squash and merge | no — one ordinary commit | **nothing** |
+| Rebase and merge | no — commits replayed | **nothing** |
+
+Squash-and-merge is the default many projects pick, and on such a repository
+`lands_as = "merges"` reports zero pending work on a history full of merged
+pull requests. `dedalo scan` says so explicitly when it finds no merge commit
+anywhere on the branch, rather than printing an empty table and letting you
+conclude there is nothing to pay for.
+
+Setting `lands_as = "commits"` pays for **every commit on the branch's
+first-parent line**. A merge commit there still counts, and still brings in the
+work on its second parent, so a history mixing both is not counted twice.
+
+The trade is worth stating: `"commits"` pays for a direct push as readily as
+for a pull request. On a branch that requires pull requests those are the same
+thing. On one that does not, anybody with write access can write themselves a
+payout — so a repository using `"commits"` should protect the branch it pays
+for.
+
+This is a setting rather than a detection because it decides what every
+contributor receives. A tool that changed its mind about that between runs,
+because a history happened to grow its first merge commit, would be worse than
+one that asks.
 
 `ignore_subjects` matches on prefix; `ignore_emails` matches exactly. No
 globbing, no regular expressions — a pattern language here is a place for a
@@ -85,8 +119,8 @@ Nothing downstream sees a float. See [Attribution](../concepts/attribution.md).
 [asset]
 symbol = "USDC"
 decimals = 6
-chain = "base"
-contract = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+chain = "devnet"
+contract = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 ```
 
 | Key | Required | Meaning |
@@ -136,7 +170,7 @@ writes the zero address as a placeholder, and settlement refuses to send to it.
 
 > **Careful** — a placeholder is refused. A *wrong real address* is refused by
 > nothing. Confirm each of these out of band before a round moves money, and
-> read [how strong the checksum is](../concepts/identities.md#how-strong-is-the-checksum)
+> read [how strong the checksum is](../concepts/identities.md#there-is-no-checksum)
 > before deciding that a valid address is a correct one.
 
 ## `[settlement]`
@@ -145,7 +179,7 @@ writes the zero address as a placeholder, and settlement refuses to send to it.
 [settlement]
 backend = "dry-run"
 # rpc_url = "https://…"
-# chain_id = 8453
+# cluster = "devnet"
 # contract = "0x…"
 ```
 
@@ -153,7 +187,7 @@ backend = "dry-run"
 | --- | --- | --- |
 | `backend` | `"dry-run"` | `dry-run` computes and verifies without spending. `evm` validates and builds the call, then refuses to sign. |
 | `rpc_url` | — | JSON-RPC endpoint of the chain. |
-| `chain_id` | — | EIP-155 chain id, checked against the endpoint. |
+| `cluster` | — | EIP-155 chain id, checked against the endpoint. |
 | `contract` | — | Claim contract a round is deposited into. |
 
 There is **no key here, and there must never be one.** `settlement.signer_env`,
@@ -196,6 +230,7 @@ open_collective = "my-project"
 
 [git]
 branch = "main"
+lands_as = "commits"
 ignore_subjects = ["chore(release)"]
 ignore_emails = ["noreply@github.com", "actions@github.com"]
 
@@ -210,17 +245,17 @@ split_with_co_authors = true
 [asset]
 symbol = "USDC"
 decimals = 6
-chain = "base"
-contract = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+chain = "devnet"
+contract = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 
 [fees]
 protocol_bps = 250
 treasury_bps = 1500
 
 [wallets]
-source = "0x1111111111111111111111111111111111111111"
-treasury = "0x2222222222222222222222222222222222222222"
-open_collective = "0x3333333333333333333333333333333333333333"
+source = "So11111111111111111111111111111111111111112"
+treasury = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+open_collective = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
 
 [settlement]
 backend = "dry-run"

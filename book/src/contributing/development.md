@@ -134,7 +134,7 @@ only under `cfg(test)` and ships in no release.
 
 ## Things to be careful about
 
-- **Never fabricate on-chain behaviour.** The `evm` backend returns
+- **Never fabricate on-chain behaviour.** The `solana` backend returns
   `NotImplemented` instead of pretending to broadcast. Do not "fix" that with a
   fake receipt.
 - **The leaf encoding is pinned.** `chain::merkle::the_leaf_encoding_has_not_moved`
@@ -142,10 +142,10 @@ only under `cfg(test)` and ships in no release.
   vault verifies against. Changing it deliberately is fine; the commit has to
   say why.
 - **The vault is thin on purpose.** `chain::vault` holds every rule and is
-  pure. `src/chain/contract` is a Stylus binding and must stay that way — a
+  pure. `src/chain/contract` is a Solana binding and must stay that way — a
   rule that appears there instead of in `vault` is a rule that cannot be
   tested.
-- **The deployable has a hard size limit.** Stylus rejects anything over 24 KiB
+- **The deployable has a hard size limit.** Solana rejects anything over 24 KiB
   compressed; `scripts/check-contract.py` measures it.
 - **`docs/settlement-architecture.md` is binding.** If the code disagrees with
   it, one of the two is wrong, and the answer is not to quietly change the code.

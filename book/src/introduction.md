@@ -72,7 +72,7 @@ money at all.
 - **It does not hold a signing key.** Not in CI, not in config, not on a
   maintainer's laptop. `dedalo propose` prints transactions; people execute
   them from a multisig. There is no flag that changes this.
-- **It does not pretend to broadcast.** The `evm` backend builds the exact
+- **It does not pretend to broadcast.** The `solana` backend builds the exact
   call a plan translates into and then returns an error rather than a fake
   receipt. A settlement path that lies is worse than one that is missing.
 - **It does not round in its own favour.** Fees round down, always, and the
@@ -86,7 +86,7 @@ money at all.
 The pipeline from git history to a verified, reproducible payout plan is
 implemented and tested end to end. **On-chain settlement is not live.** The
 vault's rules are ordinary Rust with a test per refusal; the deployable that
-wraps them is an [Arbitrum Stylus](https://arbitrum.io/stylus) crate, and it is
+wraps them is an [Solana](https://arbitrum.io/stylus) crate, and it is
 unaudited and undeployed.
 
 [How funds move](operating/multisig.md) lists what has to exist before anything

@@ -18,7 +18,7 @@ placeholders are fine if you never settle.
 
 ### Is it live? Can it pay people today?
 
-The pipeline is live. **On-chain broadcasting is not.** The `evm` backend
+The pipeline is live. **On-chain broadcasting is not.** The `solana` backend
 validates the config, builds the exact call a plan translates into, and then
 returns `NotImplemented` rather than a fake receipt. The claim contract is
 unaudited and undeployed.

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to build, e.g. v0.1.0"
+        description: "Existing tag to build, e.g. v0.0.1"
         required: true
         type: string
   # A tag created by a workflow does not raise a `push` event — GitHub
@@ -16,7 +16,7 @@ on:
   workflow_call:
     inputs:
       tag:
-        description: "Tag to build, e.g. v0.1.0"
+        description: "Tag to build, e.g. v0.0.1"
         required: true
         type: string
     secrets:

@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 584da927cc9f76ac92e31c0077c48e9f630003391239e5c581afd5526a3d957b # shrinks to scores = [1], gross = Amount(0)
+cc b66b8d1907a048024e94df0170c8daff7a69fbd45ec73867effb97034ee084d7 # shrinks to scores = [1], gross = Amount(1), index = 0
+cc b1a2f57ef8deca3909b38417eeca30d3677d3e39d364b0860e880175f001669a # shrinks to scores = [0], gross = Amount(0), fees = FeeSchedule { protocol_bps: 0, treasury_bps: 0 }
+cc 766ced16e6662165085580d47c5ab2c429077e24d4425756843aa12cb42852f3 # shrinks to scores = [1, 1], gross = Amount(0)

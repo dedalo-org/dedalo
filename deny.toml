@@ -9,16 +9,15 @@ version = 2
 # Every known advisory is an error. Add a documented exception here rather
 # than lowering the bar.
 yanked = "deny"
-ignore = [
-  # `paste` is unmaintained, not vulnerable. It arrives through
-  # alloy-sol-types, which is the ABI encoder this project chose over writing
-  # one by hand, and it is a proc macro: it runs at compile time and is in no
-  # shipped artifact. Removing it means removing alloy.
-  #
-  # Revisit when alloy drops it. This is an exception with a reason and an
-  # exit condition, which is the only kind worth having.
-  { id = "RUSTSEC-2024-0436", reason = "unmaintained proc macro, transitive through alloy-sol-types, not in any shipped artifact" },
-]
+# Empty, and it should stay that way.
+#
+# The one exception this file carried was RUSTSEC-2024-0436, for `paste`, which
+# reached the tree through alloy-sol-types. Its exit condition was "revisit when
+# alloy drops it"; the chain became Solana, alloy went with it, and `paste` is
+# no longer in the lockfile at all. An exception with a reason and an exit
+# condition is the only kind worth having — and this is what it looks like when
+# the exit condition is met.
+ignore = []
 
 [bans]
 multiple-versions = "warn"

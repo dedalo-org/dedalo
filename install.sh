@@ -4,7 +4,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/dedalo-org/dedalo/main/install.sh | sh
 #
 # Environment:
-#   DEDALO_VERSION   version to install, e.g. v0.1.0 (default: latest)
+#   DEDALO_VERSION   version to install, e.g. v0.0.1 (default: latest)
 #   DEDALO_INSTALL   directory to install into (default: ~/.local/bin)
 #
 # The download is verified against the .sha256 published beside it. If the

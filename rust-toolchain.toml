@@ -5,5 +5,3 @@
 channel = "1.91.1"
 components = ["rustfmt", "clippy", "rust-src", "rust-analyzer"]
 profile = "minimal"
-# The vault contract compiles to WebAssembly for Arbitrum Stylus.
-targets = ["wasm32-unknown-unknown"]

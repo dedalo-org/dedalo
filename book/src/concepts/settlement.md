@@ -19,7 +19,7 @@ backend = "dry-run"
 produces the same numbers a real settlement would; the difference is the
 broadcast, not the arithmetic.
 
-> **Careful** — the `evm` backend deliberately returns an error instead of
+> **Careful** — the `solana` backend deliberately returns an error instead of
 > pretending to broadcast. If you are reading the source and are tempted to
 > "fix" that by returning a receipt: a settlement path that lies is worse than
 > one that is missing. That refusal is the honest state of the project.
@@ -58,11 +58,11 @@ somebody to execute from a multisig:
 
 ```text
 1. approve(claimContract, 1000000000)
-   to     0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+   to     4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU
    data   0x095ea7b3…
 
 2. deposit(planId, merkleRoot, token, 1000000000)
-   to     0x0000000000000000000000000000000000000000
+   to     11111111111111111111111111111111
    data   0xd0e30db0…
 ```
 
@@ -106,7 +106,7 @@ produce.
 
 That is what makes them testable over their whole domain instead of by
 deploying them somewhere and poking them. The deployable at
-[`src/chain/contract`][contract] is an [Arbitrum Stylus][stylus] crate that
+[`src/chain/contract`][contract] is an [Solana][stylus] crate that
 compiles to WebAssembly and is deliberately thin — reading storage, moving a
 token, knowing the time. A reader checking whether the rules are correct should
 end up in `vault`, not in the binding.
@@ -146,7 +146,7 @@ deposited. Changing it deliberately is fine — the commit has to say why.
 ## Status
 
 **Unaudited and undeployed.** The vault's rules are tested; the deployable
-compiles and fits the 24 KiB Stylus limit with room to spare; nothing has been
+compiles and fits the 24 KiB Solana limit with room to spare; nothing has been
 deployed and no address in any shipped config is real.
 
 [What has to exist before real funds move](../operating/multisig.md#before-real-funds-move)

@@ -56,7 +56,7 @@ error: evm broadcasting is not implemented yet in this release:
        use `dedalo propose` and execute the transactions from your multisig
 ```
 
-The `evm` backend validates the configuration and builds the exact distributor
+The `solana` backend validates the configuration and builds the exact distributor
 call the plan translates into, then stops. It does not return a fake receipt,
 because a settlement path that lies is worse than one that is missing. See
 [Settlement](../concepts/settlement.md).

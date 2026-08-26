@@ -49,7 +49,7 @@ repositories; and key management on a user's own machine.
 
 ## Current status
 
-On-chain broadcasting is **not live**. The `evm` backend validates and builds
+On-chain broadcasting is **not live**. The `solana` backend validates and builds
 the distributor call, then stops before signing. Until the distributor contract
 is deployed and audited, no version of Dedalo can move funds on its own.
 

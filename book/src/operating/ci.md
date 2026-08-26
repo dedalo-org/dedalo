@@ -43,7 +43,7 @@ jobs:
 
 | Input | Default | Meaning |
 | --- | --- | --- |
-| `version` | `latest` | Release to use, e.g. `v0.1.0`. Pin it for reproducible runs. |
+| `version` | `latest` | Release to use, e.g. `v0.0.1`. Pin it for reproducible runs. |
 | `command` | `status` | `status`, `scan`, `contributors`, `plan` or `settle`. |
 | `amount` | — | Size of the round, for `plan` and `settle`. |
 | `since` | — | Start after this revision instead of the last settled commit. |
