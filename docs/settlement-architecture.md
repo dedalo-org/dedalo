@@ -11,6 +11,8 @@ rewriting the part of the system that touches money.
 | Pull, not push | Built, in Rust. `chain::merkle` produces the root and `chain::vault` holds the rules a deployed contract enforces; `src/chain/contract` binds them to Arbitrum Stylus. Unaudited, undeployed. |
 | The key is not in CI | Built, by removal. `settlement.signer_env` is gone, the `evm` backend broadcasts nothing, and `dedalo propose` prints transactions for people to sign. |
 | Chain-agnostic addresses | Built. `wallet::AddressKind`, one variant. |
+| The chain | **Decided: Solana.** Not built — the address layer, the leaf encoding and the deployable still speak EVM. |
+| The history layer | **Decided: git, and named git.** Built, and now deliberate rather than incidental. |
 
 Nothing here has moved a coin. Of the five prerequisites at the bottom of this
 page, one is done and the four that matter — a deployed contract, an audit, a
@@ -87,7 +89,7 @@ and refuses to broadcast, pointing at `dedalo propose`, which emits:
 with the calldata encoded, so a signer compares it against a plan they can
 read instead of trusting a tool they cannot.
 
-## Decision 3 — chain-agnostic, honestly
+## Decision 3 — Solana, and an address layer that still knows formats
 
 **The address layer knows about address *formats*, not about one chain.**
 
@@ -103,17 +105,94 @@ here would be indirection nobody pays for; the enum says exactly as much as is
 true today, and adding a chain is four mechanical edits the compiler will
 point at. The module docs list them.
 
-**Not decided:** which chain to launch on. The template currently names Base
-and real mainnet USDC — a default that was never chosen deliberately and should
-be, before anyone can broadcast. Testnet-first is the safer starting point.
+**Decided: Solana.** The template's Base and mainnet USDC were never a
+choice; they were scaffolding that pointed at a real token. The choice is now
+made, and it is made on the one number this product lives or dies by.
+
+**Fees, against the size of a payout.** A round here is often a few dollars per
+contributor — a merge is not a salary. What matters is not the absolute fee but
+its ratio to the amount moved, and that ratio is what kills a merge-to-earn tool
+on a chain where claiming costs cents. Solana puts a claim in fractions of a
+cent, so a contributor owed two dollars receives approximately two dollars. That
+argument does not hold for every project on this chain; it holds unusually
+strongly for this one.
+
+Three things follow, each of which happened to be a problem:
+
+- **Native USDC.** Circle issues USDC on Solana directly. No bridge sits between
+  a contributor and the asset a plan names, and no bridge is a thing this
+  project has to have an opinion about.
+- **One network, not a family.** "Which EVM chain" was not a question with an
+  answer — Base, Arbitrum, Optimism and the rest differ in ways this project
+  cannot rank, which is exactly why the default was never chosen. Solana does
+  not pose the question again next quarter.
+- **Finality in seconds.** A round can settle inside the pipeline run that
+  produced it, rather than becoming a thing somebody checks on later.
+
+**What this costs, stated plainly.** The Stylus vault goes: `chain::vault` and
+its binding are roughly six hundred lines written against a 24 KiB WebAssembly
+budget that no longer applies, and they are discarded, not ported. The rules
+they encode survive — the replay guard, the expiry path, the refusals — because
+those were always about the pull model and not about the EVM.
+
+**And one safety property is genuinely worse.** EIP-55 hides a checksum in the
+capitalisation of an address's hex letters, so a mistyped EVM address is usually
+rejected — around fifteen bits' worth, which is why `Address::checksum_bits`
+exists to report it. **A Solana address carries no checksum at all.** Any
+thirty-two bytes are a valid public key, so base58 that decodes to the right
+length is accepted, and `checksum_bits` will honestly return zero.
+
+Two things blunt that, and neither is a fix:
+
+- An address meant to hold tokens must be a real ed25519 point. Decompressing
+  it rejects roughly half of random slips, and rejects every program-derived
+  address someone pastes in by mistake. That is a validity check, not a
+  checksum, and it should be described as one.
+- Decision 1 already means a wrong address does not burn anything. A claim
+  nobody can make leaves the money in the round until it expires, rather than
+  sending it somewhere unrecoverable. The pull model was chosen for other
+  reasons and pays for itself again here.
+
+`dedalo identity link` must say all of this out loud on Solana rather than
+printing a smaller number.
+
+## Decision 4 — git, and named git
+
+**The history layer is git, the code says git, and that is a decision rather
+than an omission.**
+
+The tempting version of this is that a payout should derive from "a history
+nobody can quietly rewrite" — with git as one instance — and that `git::`,
+`GitBackend`, `[git]` and `Error::Git` are an implementation leaking into the
+vocabulary.
+
+The abstraction is real: everything downstream of `GitBackend` sees
+`MergeEvent` values and never a git invocation, and the tests already substitute
+another implementation. What is not real is the second implementation. Jujutsu,
+Sapling, Pijul and Fossil each have something that means "this change landed",
+and they do not agree that it is a commit with two parents — so `MergeEvent`,
+first-parent diffing and a revision syntax would all have to become negotiable.
+That is a redesign of the one part of the pipeline that decides who is owed
+what, paid for now, on behalf of a user who does not exist.
+
+The gap that does exist is inside git, not beyond it: attribution finds nothing
+in a squash-merge repository, and this project's own `main` is squash-only. That
+is a real defect affecting real users today, and the effort belongs there.
+
+`GitBackend` stays a trait — substituting it in tests is worth the indirection
+on its own. What it stops carrying is the implication that a second backend is
+coming.
 
 ## What has to exist before real funds move
 
-1. A claim contract with the Merkle root, a per-round replay guard keyed on the
-   plan id, and an expiry path for unclaimed funds.
+1. A claim program with the Merkle root, a per-round replay guard keyed on the
+   plan id, and an expiry path for unclaimed funds — on Solana, holding SPL
+   token accounts rather than an ERC-20 balance.
 2. An independent audit of it, published.
-3. A Safe, with signers who are not one person.
-4. A testnet round settled end to end, from `dedalo plan` to a claim.
+3. A multisig, with signers who are not one person. Squads is the Solana
+   equivalent of the Safe this list used to name; which one is chosen, and by
+   whom, is still open.
+4. A devnet round settled end to end, from `dedalo plan` to a claim.
 5. ~~Removal of `settlement.signer_env`, so the config cannot describe a key CI
    is meant to hold.~~ **Done.**
 
@@ -128,9 +207,21 @@ it produces, reads no clock and no caller, and is therefore driven over its
 whole domain by tests rather than by deploying it somewhere and poking it. The
 deployable binds it to Arbitrum Stylus and does nothing else.
 
-That is worth something. It is not an audit. Nobody outside this repository has
-looked at it, it has never held a coin, and the reentrancy, ERC-20 and expiry
-paths have been reasoned about by their author and tested by their author.
+**Both are now on their way out**, and it is worth being exact about what
+survives. The split does: a pure core that decides, and a thin binding that
+reads storage and moves a token, is the right shape on any chain, and the
+Solana program will have it. The refusals do: they are statements about the
+pull model, not about the EVM. What does not survive is everything underneath —
+`[u8; 20]` addresses, keccak leaves, ABI encoding, and a 24 KiB compressed
+budget that was the reason the vault holds raw address bytes in the first
+place.
+
+That work was worth something even so. It is not an audit. Nobody outside this
+repository has looked at it, it has never held a coin, and the reentrancy,
+ERC-20 and expiry paths have been reasoned about by their author and tested by
+their author — and the ones that matter will have to be reasoned about again,
+against a different execution model, because reentrancy on Solana is not the
+same hazard and account validation is a hazard the EVM does not have.
 
 **What was given up** should be said plainly: the previous vault was Solidity,
 and solc's model checker discharged all ten of its arithmetic conditions with
