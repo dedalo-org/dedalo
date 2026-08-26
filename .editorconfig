@@ -1,0 +1,45 @@
+# What every editor in this organisation should already know.
+#
+# The formatters are the authority — rustfmt.toml, taplo.toml, .stylua.toml —
+# and none of them apply while somebody is typing. This does, which is the
+# difference between a stray tab being caught by an editor and being caught by
+# review.
+#
+# The same file is in every dedalo-org repository, deliberately identical.
+# Five slightly different copies would be five things to drift.
+#
+# https://editorconfig.org
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# rustfmt.toml is the authority: max_width = 100, and its default indent is 4.
+[*.rs]
+indent_size = 4
+max_line_length = 100
+
+# taplo.toml: indent_string = "  ", column_width = 100.
+[*.toml]
+max_line_length = 100
+
+# .stylua.toml: indent_width = 2, column_width = 100.
+[*.lua]
+max_line_length = 100
+
+[*.py]
+indent_size = 4
+
+[*.{md,markdown}]
+# No page in the handbook ends a line with two spaces, so trimming is safe and
+# a trailing space stays what it is: an accident.
+max_line_length = 80
+
+[Makefile]
+indent_style = tab
