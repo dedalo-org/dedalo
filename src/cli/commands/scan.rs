@@ -1,6 +1,7 @@
 //! `dedalo scan` and `dedalo contributors` — read-only views of pending work.
 
 use crate::Engine;
+use crate::git::LandsAs;
 use anyhow::Result;
 
 use crate::cli::args::RangeArgs;
@@ -19,16 +20,19 @@ pub fn scan(engine: &Engine, args: &RangeArgs, json: bool) -> Result<()> {
     }
 
     if merges.is_empty() {
-        println!(
-            "No unpaid merges on {}.",
-            ui::bold(&engine.config().git.branch)
-        );
-        return Ok(());
+        return report_nothing_pending(engine);
     }
 
     let policy = &engine.config().attribution;
+    // The column and the count name whatever this repository actually pays
+    // for, so the output cannot imply merge commits to a project that has
+    // none.
+    let unit = match engine.config().git.lands_as {
+        LandsAs::Merges => ("MERGE", "merges"),
+        LandsAs::Commits => ("CHANGE", "changes"),
+    };
     let mut table = Table::new(&[
-        ("MERGE", Align::Left),
+        (unit.0, Align::Left),
         ("DATE", Align::Left),
         ("COMMITS", Align::Right),
         ("+/-", Align::Right),
@@ -48,9 +52,55 @@ pub fn scan(engine: &Engine, args: &RangeArgs, json: bool) -> Result<()> {
     print!("{}", table.render());
     println!();
     println!(
-        "{} merges pending on {}",
+        "{} {} pending on {}",
         ui::bold(&merges.len().to_string()),
+        unit.1,
         engine.config().git.branch
+    );
+    Ok(())
+}
+
+/// Explain an empty scan, which has two causes that look identical.
+///
+/// "Nothing new since the last round" and "this repository's merge button
+/// squashes, so there has never been anything to find" produce the same empty
+/// table. Reporting the first when it is the second is how a project goes on
+/// paying nobody while the tool appears to work — so the branch is asked
+/// whether it contains a merge commit at all before anything is claimed.
+fn report_nothing_pending(engine: &Engine) -> Result<()> {
+    let branch = &engine.config().git.branch;
+
+    if engine.config().git.lands_as == LandsAs::Commits {
+        println!("No unpaid changes on {}.", ui::bold(branch));
+        return Ok(());
+    }
+
+    // Only `merges` mode can be looking for the wrong thing.
+    if engine.repo().has_merge_commits(branch)? {
+        println!("No unpaid merges on {}.", ui::bold(branch));
+        return Ok(());
+    }
+
+    println!("No unpaid merges on {}.", ui::bold(branch));
+    println!();
+    println!(
+        "{} {} contains no merge commit at all, so there is nothing here to \n\
+         pay for and never will be. Squash-and-merge and rebase-and-merge both \n\
+         land a pull request as an ordinary commit.",
+        ui::bold("Note:"),
+        branch,
+    );
+    println!();
+    println!("If that is how this project merges, say so in dedalo.toml:");
+    println!();
+    println!("    [git]");
+    println!("    lands_as = \"commits\"");
+    println!();
+    println!(
+        "That pays for every commit on {}'s first-parent line. On a branch \n\
+         that requires pull requests those are the same thing; on one that \n\
+         does not, a direct push earns too.",
+        branch,
     );
     Ok(())
 }

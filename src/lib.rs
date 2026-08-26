@@ -210,6 +210,7 @@ impl Engine {
             since_commit: cursor,
             since_timestamp: None,
             limit: None,
+            lands_as: self.config.git.lands_as,
         };
         let merges = self.repo.merges(&query)?;
         Ok(merges

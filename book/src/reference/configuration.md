@@ -31,15 +31,49 @@ open_collective = "my-project"
 ```toml
 [git]
 branch = "main"
+lands_as = "merges"
 ignore_subjects = ["chore(release)", "Merge branch"]
 ignore_emails = ["noreply@github.com", "actions@github.com"]
 ```
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `branch` | `"main"` | Merges into this branch are what earn a payout. |
-| `ignore_subjects` | `[]` | Merges whose subject **starts with** one of these are skipped entirely. |
+| `branch` | `"main"` | Changes landing on this branch are what earn a payout. |
+| `lands_as` | `"merges"` | What a landed change looks like here: `"merges"` (a merge commit) or `"commits"` (every commit on the branch's first-parent line). |
+| `ignore_subjects` | `[]` | Changes whose subject **starts with** one of these are skipped entirely. |
 | `ignore_emails` | `["noreply@github.com", "actions@github.com"]` | Emails that never receive a payout, however much they commit. |
+
+### `lands_as`, and why it is not detected for you
+
+GitHub offers three ways to land a pull request and **only one of them makes a
+merge commit**:
+
+| Merge method | Merge commit | `lands_as = "merges"` sees it |
+| --- | --- | --- |
+| Create a merge commit | yes | yes |
+| Squash and merge | no — one ordinary commit | **nothing** |
+| Rebase and merge | no — commits replayed | **nothing** |
+
+Squash-and-merge is the default many projects pick, and on such a repository
+`lands_as = "merges"` reports zero pending work on a history full of merged
+pull requests. `dedalo scan` says so explicitly when it finds no merge commit
+anywhere on the branch, rather than printing an empty table and letting you
+conclude there is nothing to pay for.
+
+Setting `lands_as = "commits"` pays for **every commit on the branch's
+first-parent line**. A merge commit there still counts, and still brings in the
+work on its second parent, so a history mixing both is not counted twice.
+
+The trade is worth stating: `"commits"` pays for a direct push as readily as
+for a pull request. On a branch that requires pull requests those are the same
+thing. On one that does not, anybody with write access can write themselves a
+payout — so a repository using `"commits"` should protect the branch it pays
+for.
+
+This is a setting rather than a detection because it decides what every
+contributor receives. A tool that changed its mind about that between runs,
+because a history happened to grow its first merge commit, would be worse than
+one that asks.
 
 `ignore_subjects` matches on prefix; `ignore_emails` matches exactly. No
 globbing, no regular expressions — a pattern language here is a place for a
@@ -196,6 +230,7 @@ open_collective = "my-project"
 
 [git]
 branch = "main"
+lands_as = "commits"
 ignore_subjects = ["chore(release)"]
 ignore_emails = ["noreply@github.com", "actions@github.com"]
 

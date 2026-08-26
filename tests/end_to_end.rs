@@ -9,7 +9,7 @@ use dedalo::attribution::identity::Identity;
 use dedalo::chain::settlement::DryRunSettlement;
 use dedalo::chain::wallet::Address;
 use dedalo::config::Config;
-use dedalo::git::{CliGit, GitBackend, HistoryQuery};
+use dedalo::git::{CliGit, GitBackend, HistoryQuery, LandsAs};
 use dedalo::money::Amount;
 use dedalo::storage::ledger::Ledger;
 use dedalo::testing::TempRepo;
@@ -266,4 +266,136 @@ fn futures_block_on<T>(future: impl Future<Output = T>) -> T {
             Poll::Pending => std::hint::spin_loop(),
         }
     }
+}
+
+/// The defect in #13 and #45: a squash-merge repository has no merge commits,
+/// so the unit Dedalo was built on matches nothing at all.
+#[test]
+fn a_squash_merge_repository_has_no_merges_to_find() {
+    let repo = TempRepo::new("squash-only");
+    repo.commit_file(
+        "a.rs",
+        "one\n",
+        "feat: the first change (#1)",
+        Some(("ada", "ada@example.com")),
+    );
+    repo.commit_file(
+        "b.rs",
+        "two\n",
+        "feat: the second change (#2)",
+        Some(("bea", "bea@example.com")),
+    );
+
+    let git = CliGit::discover(repo.path()).unwrap();
+    let query = HistoryQuery {
+        branch: "main".into(),
+        lands_as: LandsAs::Merges,
+        ..Default::default()
+    };
+
+    assert!(
+        git.merges(&query).unwrap().is_empty(),
+        "a squash-merge repository has no merge commits, which is the whole defect"
+    );
+    assert!(
+        !git.has_merge_commits("main").unwrap(),
+        "and the backend must be able to say so, or the empty result is indistinguishable \
+         from nothing new since the last round"
+    );
+}
+
+/// The fix: every commit on the first-parent line is a change that landed.
+#[test]
+fn landing_as_commits_pays_for_every_squashed_pull_request() {
+    let repo = TempRepo::new("squash-paid");
+    repo.commit_file(
+        "a.rs",
+        "one\n",
+        "feat: the first change (#1)",
+        Some(("ada", "ada@example.com")),
+    );
+    repo.commit_file(
+        "b.rs",
+        "two\n",
+        "feat: the second change (#2)",
+        Some(("bea", "bea@example.com")),
+    );
+
+    let git = CliGit::discover(repo.path()).unwrap();
+    let query = HistoryQuery {
+        branch: "main".into(),
+        lands_as: LandsAs::Commits,
+        ..Default::default()
+    };
+    let landed = git.merges(&query).unwrap();
+
+    // The initial commit the harness makes, plus the two above.
+    assert_eq!(
+        landed.len(),
+        3,
+        "every commit on the branch landed something"
+    );
+
+    let second = landed.last().expect("a change");
+    assert_eq!(second.subject, "feat: the second change (#2)");
+    assert_eq!(
+        second.parents.len(),
+        1,
+        "a squashed pull request has exactly one parent"
+    );
+    assert_eq!(
+        second.commits.len(),
+        1,
+        "a change with one parent introduced itself; returning nothing here would \
+         score it as having contributed no commits"
+    );
+    assert_eq!(second.commits[0].author.email, "bea@example.com");
+    assert!(
+        second.diff.insertions > 0,
+        "the diff is measured against the single parent"
+    );
+}
+
+/// A history that mixes both must not pay twice for the same work.
+#[test]
+fn a_merge_and_its_commits_are_counted_once_under_either_mode() {
+    let repo = TempRepo::new("mixed");
+    repo.merge_feature("feature-a", ("ada", "ada@example.com"), 12);
+    repo.commit_file(
+        "direct.rs",
+        "x\n",
+        "fix: landed straight (#9)",
+        Some(("bea", "bea@example.com")),
+    );
+
+    let git = CliGit::discover(repo.path()).unwrap();
+    let commits_mode = git
+        .merges(&HistoryQuery {
+            branch: "main".into(),
+            lands_as: LandsAs::Commits,
+            ..Default::default()
+        })
+        .unwrap();
+
+    // The commits a merge brought in live on its second parent, which is not
+    // on the first-parent line — so they are counted by the merge and never
+    // again on their own.
+    let shas: Vec<&str> = commits_mode.iter().map(|c| c.sha.as_str()).collect();
+    let mut introduced: Vec<&str> = Vec::new();
+    for change in &commits_mode {
+        if change.parents.len() > 1 {
+            introduced.extend(change.commits.iter().map(|c| c.sha.as_str()));
+        }
+    }
+    for sha in introduced {
+        assert!(
+            !shas.contains(&sha),
+            "{sha} was brought in by a merge and must not also be a landed change"
+        );
+    }
+
+    assert!(
+        git.has_merge_commits("main").unwrap(),
+        "this history does contain a merge"
+    );
 }

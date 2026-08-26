@@ -8,6 +8,7 @@ use crate::attribution::AttributionPolicy;
 use crate::attribution::identity::{Identity, IdentityMap};
 use crate::chain::wallet::{Address, AddressKind};
 use crate::error::{Error, Result};
+use crate::git::LandsAs;
 use crate::money::Asset;
 use crate::money::treasury::FeeSchedule;
 
@@ -61,8 +62,15 @@ pub struct Project {
 /// Which slice of git history earns a payout.
 #[serde(default, deny_unknown_fields)]
 pub struct GitConfig {
-    /// Branch whose merges trigger payouts.
+    /// Branch whose landed changes trigger payouts.
     pub branch: String,
+    /// What a landed change looks like in this repository.
+    ///
+    /// Squash-and-merge produces no merge commit, so a repository using it
+    /// needs `lands_as = "commits"` or it will pay for nothing at all. The
+    /// default stays `merges`, because this decides what every contributor
+    /// receives and an upgrade must not change that on its own.
+    pub lands_as: LandsAs,
     /// Skip merges whose subject matches one of these prefixes.
     pub ignore_subjects: Vec<String>,
     /// Never pay these emails (bots, CI accounts).
@@ -73,6 +81,7 @@ impl Default for GitConfig {
     fn default() -> Self {
         Self {
             branch: "main".into(),
+            lands_as: LandsAs::default(),
             ignore_subjects: Vec::new(),
             ignore_emails: vec!["noreply@github.com".into(), "actions@github.com".into()],
         }

@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use super::{Author, DiffStat, GitBackend, HistoryQuery, MergeEvent, MergedCommit};
+use super::{Author, DiffStat, GitBackend, HistoryQuery, LandsAs, MergeEvent, MergedCommit};
 use crate::error::{Error, Result};
 
 /// ASCII unit/record separators: safe field delimiters because git refuses
@@ -55,6 +55,11 @@ impl CliGit {
 
     /// Commits introduced by `merge_sha`, i.e. reachable from the merged branch
     /// but not from the mainline it landed on.
+    ///
+    /// A change with one parent introduced exactly itself, and the caller
+    /// builds that record from fields it already read. Returning nothing here
+    /// would score a squashed pull request as having contributed no commits,
+    /// which is how `split_with_co_authors` would quietly stop working.
     fn merged_commits(&self, parents: &[String]) -> Result<Vec<MergedCommit>> {
         let (Some(first), Some(second)) = (parents.first(), parents.get(1)) else {
             return Ok(Vec::new());
@@ -107,17 +112,27 @@ impl GitBackend for CliGit {
     }
 
     fn merges(&self, query: &HistoryQuery) -> Result<Vec<MergeEvent>> {
-        let format = format!("%H{FIELD}%P{FIELD}%an{FIELD}%ae{FIELD}%ct{FIELD}%s{RECORD}");
+        // Author and committer are both read because they differ exactly
+        // where it matters. On a squashed pull request the author is whoever
+        // wrote the work and the committer is whatever landed it — usually
+        // `GitHub <noreply@github.com>`, which `ignore_emails` already drops.
+        // Crediting the author as the merger would pay the same person twice
+        // wherever `credit_merger` is on.
+        //
+        // `%b` is last, so a body containing a separator can only corrupt
+        // itself.
+        let format = format!(
+            "%H{FIELD}%P{FIELD}%an{FIELD}%ae{FIELD}%at{FIELD}\
+             %cn{FIELD}%ce{FIELD}%ct{FIELD}%s{FIELD}%b{RECORD}"
+        );
         let format_arg = format!("--format={format}");
 
-        // `--first-parent` keeps us on the mainline: merges of merges inside a
-        // feature branch are already accounted for by the merge that lands it.
-        let mut args: Vec<String> = vec![
-            "log".into(),
-            format_arg,
-            "--merges".into(),
-            "--first-parent".into(),
-        ];
+        // `--first-parent` keeps us on the mainline: work inside a feature
+        // branch is already accounted for by whatever landed it.
+        let mut args: Vec<String> = vec!["log".into(), format_arg, "--first-parent".into()];
+        if query.lands_as == LandsAs::Merges {
+            args.push("--merges".into());
+        }
         if let Some(limit) = query.limit {
             args.push(format!("--max-count={limit}"));
         }
@@ -140,30 +155,66 @@ impl GitBackend for CliGit {
                 continue;
             }
             let fields: Vec<&str> = record.split(FIELD).collect();
-            if fields.len() < 6 {
+            if fields.len() < 10 {
                 return Err(Error::GitParse {
-                    context: "merge history".into(),
-                    detail: format!("expected 6 fields, got {}", fields.len()),
+                    context: "history of landed changes".into(),
+                    detail: format!("expected 10 fields, got {}", fields.len()),
                 });
             }
             let sha = fields[0].trim().to_string();
             let parents: Vec<String> = fields[1].split_whitespace().map(str::to_string).collect();
+            let author = Author::new(fields[2], fields[3]);
+            let authored_at: i64 = fields[4].trim().parse().unwrap_or_default();
+            let committer = Author::new(fields[5], fields[6]);
+            let landed_at: i64 = fields[7].trim().parse().unwrap_or_default();
+            let subject = fields[8].trim().to_string();
             let diff = match parents.first() {
                 Some(first) => self.merge_diff(&sha, first)?,
                 None => DiffStat::default(),
             };
+            // A merge carries the work on its second parent. Anything else
+            // introduced exactly itself, and every field for that record has
+            // already been read.
+            let is_merge = parents.len() > 1;
+            let commits = if is_merge {
+                self.merged_commits(&parents)?
+            } else {
+                vec![MergedCommit {
+                    sha: sha.clone(),
+                    author: author.clone(),
+                    co_authors: parse_co_authors(fields[9]),
+                    authored_at,
+                    subject: subject.clone(),
+                }]
+            };
             merges.push(MergeEvent {
-                commits: self.merged_commits(&parents)?,
+                commits,
                 sha,
-                merged_by: Author::new(fields[2], fields[3]),
-                merged_at: fields[4].trim().parse().unwrap_or_default(),
-                subject: fields[5].trim().to_string(),
+                // A merge commit's author is whoever produced the merge, which
+                // is what this field has always meant. A squashed pull request
+                // has no such person, so the committer is the closest true
+                // answer to "what landed this".
+                merged_by: if is_merge { author } else { committer },
+                merged_at: landed_at,
+                subject,
                 parents,
                 diff,
             });
         }
         merges.reverse();
         Ok(merges)
+    }
+
+    fn has_merge_commits(&self, branch: &str) -> Result<bool> {
+        let out = self.git(&[
+            "log",
+            "--merges",
+            "--first-parent",
+            "--max-count=1",
+            "--format=%H",
+            branch,
+        ])?;
+        Ok(!out.trim().is_empty())
     }
 }
 
