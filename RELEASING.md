@@ -1,8 +1,11 @@
 # Releasing Dedalo
 
 A release is one version number, one tag, and one set of artifacts. The
-library and the binary are one crate, so `v0.4.0` means exactly one thing:
-`dedalo` is at `0.4.0` on crates.io, and the tagged commit built it.
+library and the binary are one crate, so `v0.0.1` will mean exactly one thing:
+`dedalo` is at `0.0.1` on crates.io, and the tagged commit built it.
+
+Today `dedalo` is at `0.0.0` — a placeholder that holds the name and contains
+no code. `0.0.1` is the first release that carries any.
 
 Nothing here requires a maintainer to run commands locally: the whole flow is
 two workflow runs and one pull request review.
@@ -102,7 +105,8 @@ teaches people the dates mean nothing.
    - builds binaries for five targets with SHA-256 checksums;
    - attaches signed build provenance to every archive;
    - publishes a GitHub release with the changelog section as its notes;
-   - publishes `dedalo` to crates.io;
+   - publishes `dedalo` to crates.io, unless that version is already there —
+     a re-run of a release must not fail on the one step that cannot repeat;
 
 If step 4 fails after the tag exists, fix forward: delete the tag, merge the
 fix, and re-run **Tag**. Never move a tag that a release already published.
@@ -118,7 +122,7 @@ underneath someone. Pin `@v0.0.1` instead if you want the workflow frozen.
 
 | Secret / setting | Where | Used by |
 | --- | --- | --- |
-| `CARGO_REGISTRY_TOKEN` | environment `crates-io` | publishing to crates.io |
+| **Trusted Publishing** | crates.io → dedalo → Settings → Trusted Publishing | publishing to crates.io — see below |
 | Pages source: *GitHub Actions* | Settings → Pages | the handbook at `/dedalo/` |
 | `contents: write` for Actions | Settings → Actions | tagging and release creation |
 | `main` ruleset, imported from `.github/rulesets/main.json` | Settings → Rules | squash-only merges, required checks, no force-push |
@@ -126,6 +130,37 @@ underneath someone. Pin `@v0.0.1` instead if you want the workflow frozen.
 
 `GITHUB_TOKEN` covers the GitHub release and the container registry; no extra
 secret is needed for either.
+
+### There is no registry token, on purpose
+
+Publishing does not use a stored `CARGO_REGISTRY_TOKEN`. It uses **Trusted
+Publishing**: crates.io mints a token that lives thirty minutes, in exchange
+for a signed OIDC claim GitHub issues at run time, and only for this repository
+running this workflow in this environment.
+
+A long-lived registry token is a credential that sits in a settings page until
+somebody leaks it, and it is exactly the thing
+[Decision 2](docs/settlement-architecture.md) refuses for the money path. The
+same argument applies to the thing that ships the code, and this is now the
+industry default rather than a preference of ours.
+
+Configure it once, on crates.io, under **dedalo → Settings → Trusted
+Publishing → Add**:
+
+| Field | Value |
+| --- | --- |
+| Repository owner | `dedalo-org` |
+| Repository name | `dedalo` |
+| Workflow filename | `release.yml` |
+| Environment | `crates-io` |
+
+The environment matters: it is what stops a workflow run from another branch,
+or a job that is not this one, from being able to publish at all.
+
+Until that entry exists, the `crates-io` job fails at the token exchange with a
+message naming the missing configuration — which is the right failure. Nothing
+else in a release depends on it, so the tag, the binaries and the GitHub
+release all still happen.
 
 The API reference needs nothing here: docs.rs builds it from the crate the
 release publishes.
