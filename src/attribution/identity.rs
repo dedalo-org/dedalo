@@ -45,7 +45,7 @@ impl Identity {
     /// # Errors
     ///
     /// Returns [`crate::error::Error::Address`] if `wallet` is not a usable
-    /// address — including a mixed-case one whose EIP-55 checksum fails,
+    /// address — including one that decodes to the wrong number of bytes,
     /// which is what a typo looks like.
     pub fn parse(handle: impl Into<String>, wallet: &str) -> crate::error::Result<Self> {
         Ok(Self::new(handle, Address::parse(wallet)?))
@@ -141,7 +141,7 @@ mod tests {
     #[test]
     fn resolves_authors_case_insensitively() {
         let map = IdentityMap::new(vec![
-            Identity::parse("ada", "0x00000000000000000000000000000000000000ad")
+            Identity::parse("ada", "So11111111111111111111111111111111111111112")
                 .unwrap()
                 .with_email("Ada@Example.COM"),
         ]);
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn link_merges_into_existing_handle() {
         let mut map = IdentityMap::default();
-        let wallet = || Address::parse("0x00000000000000000000000000000000000000ad").unwrap();
+        let wallet = || Address::parse("So11111111111111111111111111111111111111112").unwrap();
         assert!(map.link("ada", wallet(), "ada@example.com"));
         assert!(map.link("ada", wallet(), "ada@work.com"));
         assert!(!map.link("ada", wallet(), "ada@work.com"));

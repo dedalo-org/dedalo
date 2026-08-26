@@ -24,29 +24,64 @@
 use serde::{Deserialize, Serialize};
 
 use crate::chain::merkle::ClaimTree;
-use crate::chain::settlement::abi;
+use crate::chain::settlement::instruction;
 use crate::chain::wallet::Address;
 use crate::config::Config;
 use crate::error::{Error, Result};
 use crate::money::Amount;
 use crate::payout::PayoutPlan;
 
-/// One transaction for a signer to execute.
+/// One account an instruction touches, as a signer must check it.
+///
+/// Solana instructions carry their accounts explicitly, and *which* accounts
+/// an instruction is given is as much a part of what it does as its data. A
+/// signer who checks only the data has checked half of it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TransactionProposal {
+pub struct AccountRef {
+    /// What this account is for, in words.
+    pub role: String,
+    /// The address, where it is known ahead of time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+    /// How to derive it, for a program-derived address.
+    ///
+    /// Present instead of `address` rather than as well as it. Deriving these
+    /// requires the claim program's id and its seed layout, and **the claim
+    /// program does not exist yet** — so this states the seeds the program
+    /// must use and leaves the arithmetic to whoever builds the transaction.
+    /// Printing a computed address for a program nobody has written would be
+    /// inventing on-chain behaviour, which is the one thing this crate must
+    /// never do.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub derivation: Option<String>,
+    /// Whether this account must sign.
+    pub signer: bool,
+    /// Whether the instruction may modify it.
+    pub writable: bool,
+}
+
+/// One instruction for a signer to execute.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InstructionProposal {
     /// Position in the sequence. They are not independent: a deposit before
-    /// its approval reverts.
+    /// its approval fails.
     pub step: u32,
-    /// What this transaction does, for the person deciding whether to sign.
+    /// What this instruction does, for the person deciding whether to sign.
     pub description: String,
-    /// EIP-155 chain this must be executed on. A signer with several chains
-    /// configured needs to be told which, not left to guess.
-    pub chain_id: u64,
-    /// Contract to call.
-    pub to: String,
-    /// Native coin sent along, in base units. Zero for every ERC-20 step.
-    pub value: Amount,
-    /// ABI-encoded calldata, `0x`-prefixed.
+    /// Cluster this must be executed on. A signer with several configured
+    /// needs to be told which, not left to guess.
+    pub cluster: String,
+    /// Program that executes it.
+    pub program_id: String,
+    /// Every account the instruction takes, in order. Order is part of the
+    /// interface: Anchor matches them positionally.
+    pub accounts: Vec<AccountRef>,
+    /// Instruction data, hex.
+    ///
+    /// Hex rather than the base58 an explorer shows, because what a signer
+    /// compares this against is a plan id and a Merkle root, and both of those
+    /// are already hex. Making them the same alphabet is the difference
+    /// between checking and squinting.
     pub data: String,
 }
 
@@ -57,16 +92,16 @@ pub struct RoundProposal {
     pub plan_id: String,
     /// Root of the tree contributors prove against, `0x`-prefixed.
     pub merkle_root: String,
-    /// Contract that holds the deposit and pays claims.
-    pub claim_contract: String,
+    /// Program that holds the deposit and pays claims.
+    pub claim_program: String,
     /// Token being distributed, or `None` for the chain's native coin.
     pub token: Option<String>,
     /// Sum of every claim. What the deposit must cover exactly.
     pub total: Amount,
     /// How many contributors can claim.
     pub claims: usize,
-    /// The transactions, in the order they must run.
-    pub transactions: Vec<TransactionProposal>,
+    /// The instructions, in the order they must run.
+    pub instructions: Vec<InstructionProposal>,
 }
 
 impl RoundProposal {
@@ -75,32 +110,34 @@ impl RoundProposal {
     /// # Errors
     ///
     /// Returns [`Error::Config`] if the settlement section does not name a
-    /// chain id and a claim contract, and [`Error::Config`] if the plan pays
+    /// cluster and a claim program, and [`Error::Config`] if the plan pays
     /// nobody — there is nothing to deposit against.
     ///
-    /// Returns [`Error::NotImplemented`] for a native-coin round: the deposit
-    /// path for a chain's own coin is a different call with a `value`, and
-    /// writing it untested would be guessing at how money moves.
+    /// Returns [`Error::NotImplemented`] for a round in native SOL: wrapping
+    /// and unwrapping SOL is a different sequence, and writing it untested
+    /// would be guessing at how money moves.
     pub fn build(plan: &PayoutPlan, config: &Config) -> Result<Self> {
         plan.verify()?;
 
         let settlement = &config.settlement;
-        let chain_id = settlement
-            .chain_id
-            .ok_or_else(|| Error::config("settlement.chain_id is required to propose a round"))?;
-        let claim_contract = settlement
-            .contract
+        let cluster = settlement
+            .cluster
+            .clone()
+            .ok_or_else(|| Error::config("settlement.cluster is required to propose a round"))?;
+        let claim_program = settlement
+            .program_id
             .as_deref()
-            .ok_or_else(|| Error::config("settlement.contract is required to propose a round"))?;
-        let claim_contract = Address::parse(claim_contract)?;
+            .ok_or_else(|| Error::config("settlement.program_id is required to propose a round"))?;
+        let claim_program = Address::parse(claim_program)?;
 
-        let token = match plan.asset.contract.as_deref() {
+        let mint = match plan.asset.contract.as_deref() {
             Some(contract) => Address::parse(contract)?,
             None => {
                 return Err(Error::NotImplemented {
-                    feature: "native-coin rounds",
-                    hint: "set asset.contract to an ERC-20; depositing the chain's own coin \
-                           is a different call and is not written yet",
+                    feature: "rounds in native SOL",
+                    hint: "set asset.contract to an SPL mint; paying in SOL means wrapping \
+                           and unwrapping it, which is a different sequence and is not \
+                           written yet",
                 });
             }
         };
@@ -108,54 +145,110 @@ impl RoundProposal {
         let tree = ClaimTree::from_plan(plan)?;
         let total = tree.total()?;
 
-        let transactions = vec![
-            TransactionProposal {
+        let instructions = vec![
+            // Step one is SPL Token's own `Approve`, whose account order is
+            // published and stable: source, delegate, owner. Nothing here is
+            // this project's invention.
+            InstructionProposal {
                 step: 1,
                 description: format!(
-                    "approve {} to move {} {}",
-                    claim_contract.as_str(),
+                    "delegate {} {} to the round vault",
                     plan.asset.format_amount(total),
                     plan.asset.symbol
                 ),
-                chain_id,
-                to: token.as_str().to_string(),
-                value: Amount::ZERO,
-                data: hex_data(&abi::approve_calldata(&claim_contract, total)?),
+                cluster: cluster.clone(),
+                program_id: SPL_TOKEN_PROGRAM.to_string(),
+                accounts: vec![
+                    AccountRef {
+                        role: "source token account, held by the multisig".into(),
+                        address: None,
+                        derivation: Some(format!(
+                            "associated token account of the signing multisig for mint {}",
+                            mint.as_str()
+                        )),
+                        signer: false,
+                        writable: true,
+                    },
+                    AccountRef {
+                        role: "delegate: the round vault".into(),
+                        address: None,
+                        derivation: Some(format!(
+                            "PDA of {} with seeds [\"round\", plan_id]",
+                            claim_program.as_str()
+                        )),
+                        signer: false,
+                        writable: false,
+                    },
+                    AccountRef {
+                        role: "owner of the source account".into(),
+                        address: None,
+                        derivation: Some("the signing multisig".into()),
+                        signer: true,
+                        writable: false,
+                    },
+                ],
+                data: hex::encode(instruction::approve_data(total)?),
             },
-            TransactionProposal {
+            InstructionProposal {
                 step: 2,
                 description: format!(
                     "deposit round {} against root {}",
                     plan.short_id(),
                     tree.root_hex()
                 ),
-                chain_id,
-                to: claim_contract.as_str().to_string(),
-                value: Amount::ZERO,
-                data: hex_data(&abi::deposit_calldata(
-                    &plan.id,
-                    tree.root(),
-                    &token,
-                    total,
-                )?),
+                cluster: cluster.clone(),
+                program_id: claim_program.as_str().to_string(),
+                accounts: vec![
+                    AccountRef {
+                        role: "round record".into(),
+                        address: None,
+                        derivation: Some(format!(
+                            "PDA of {} with seeds [\"round\", plan_id]",
+                            claim_program.as_str()
+                        )),
+                        signer: false,
+                        writable: true,
+                    },
+                    AccountRef {
+                        role: "token mint being distributed".into(),
+                        address: Some(mint.as_str().to_string()),
+                        derivation: None,
+                        signer: false,
+                        writable: false,
+                    },
+                    AccountRef {
+                        role: "authority funding the round".into(),
+                        address: None,
+                        derivation: Some("the signing multisig".into()),
+                        signer: true,
+                        writable: true,
+                    },
+                    AccountRef {
+                        role: "SPL Token program".into(),
+                        address: Some(SPL_TOKEN_PROGRAM.to_string()),
+                        derivation: None,
+                        signer: false,
+                        writable: false,
+                    },
+                ],
+                data: hex::encode(instruction::deposit_data(&plan.id, tree.root(), total)?),
             },
         ];
 
         Ok(Self {
             plan_id: plan.id.clone(),
             merkle_root: tree.root_hex(),
-            claim_contract: claim_contract.as_str().to_string(),
-            token: Some(token.as_str().to_string()),
+            claim_program: claim_program.as_str().to_string(),
+            token: Some(mint.as_str().to_string()),
             total,
             claims: tree.claims().len(),
-            transactions,
+            instructions,
         })
     }
 }
 
-fn hex_data(bytes: &[u8]) -> String {
-    format!("0x{}", hex::encode(bytes))
-}
+/// SPL Token, whose address is the same on every cluster.
+const SPL_TOKEN_PROGRAM: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
 #[cfg(test)]
 mod tests {
@@ -165,14 +258,14 @@ mod tests {
 
     fn plan_and_config() -> (PayoutPlan, Config) {
         let mut config = Config::template("demo");
-        config.asset.contract = Some("0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB".into());
-        config.settlement.chain_id = Some(8453);
-        config.settlement.contract = Some("0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359".into());
+        config.asset.contract = Some("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU".into());
+        config.settlement.cluster = Some("devnet".into());
+        config.settlement.program_id = Some("MerkS3LaQBSvM5JZsvBaLZBBSMvMB5aTuLRHrvKAyDo".into());
         // The template ships zero addresses; a round needs real ones.
         config.wallets.treasury =
-            Address::parse("0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb").unwrap();
+            Address::parse("So11111111111111111111111111111111111111112").unwrap();
         config.wallets.open_collective =
-            Address::parse("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed").unwrap();
+            Address::parse("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL").unwrap();
 
         let plan = PlanBuilder::new(
             &config,
@@ -196,69 +289,82 @@ mod tests {
         let (plan, config) = plan_and_config();
         let proposal = RoundProposal::build(&plan, &config).unwrap();
 
-        assert_eq!(proposal.transactions.len(), 2);
-        assert_eq!(proposal.transactions[0].step, 1);
-        assert_eq!(proposal.transactions[1].step, 2);
+        assert_eq!(proposal.instructions.len(), 2);
+        assert_eq!(proposal.instructions[0].step, 1);
+        assert_eq!(proposal.instructions[1].step, 2);
 
-        // The approval goes to the token; the deposit to the claim contract.
-        assert_eq!(
-            proposal.transactions[0].to,
-            plan.asset.contract.clone().unwrap()
-        );
-        assert_eq!(proposal.transactions[1].to, proposal.claim_contract);
+        // The approval is the token program's; the deposit is the claim
+        // program's. Two different programs, which is the thing a signer most
+        // needs to see and the EVM version could not express.
+        assert_eq!(proposal.instructions[0].program_id, SPL_TOKEN_PROGRAM);
+        assert_eq!(proposal.instructions[1].program_id, proposal.claim_program);
 
-        // Nothing carries native coin, and nothing carries a signature.
-        assert!(
-            proposal
-                .transactions
-                .iter()
-                .all(|t| t.value == Amount::ZERO)
-        );
-        assert!(
-            proposal
-                .transactions
-                .iter()
-                .all(|t| t.data.starts_with("0x"))
-        );
+        // Both name the cluster, so a signer is never left inferring it.
+        assert!(proposal.instructions.iter().all(|i| i.cluster == "devnet"));
 
         assert!(proposal.merkle_root.starts_with("0x"));
         assert_eq!(proposal.merkle_root.len(), 2 + 64);
     }
 
+    /// Every account is either known or explained. A blank in this list is a
+    /// thing a signer would have to invent, and inventing an account is how a
+    /// deposit lands somewhere nobody meant.
+    #[test]
+    fn every_account_is_either_named_or_derived() {
+        let (plan, config) = plan_and_config();
+        let proposal = RoundProposal::build(&plan, &config).unwrap();
+
+        for instruction in &proposal.instructions {
+            assert!(!instruction.accounts.is_empty());
+            for account in &instruction.accounts {
+                assert!(
+                    account.address.is_some() != account.derivation.is_some(),
+                    "{} is neither named nor derived, or claims to be both",
+                    account.role
+                );
+                assert!(!account.role.trim().is_empty());
+            }
+
+            // Exactly one signer per instruction: the multisig funding it.
+            let signers = instruction.accounts.iter().filter(|a| a.signer).count();
+            assert_eq!(signers, 1, "step {}", instruction.step);
+        }
+    }
+
     /// The approval must cover exactly what the deposit spends. An approval
-    /// for less reverts; one for more leaves an allowance behind.
+    /// for less fails; one for more leaves a delegation behind.
     #[test]
     fn the_approval_and_the_deposit_name_the_same_total() {
         let (plan, config) = plan_and_config();
         let proposal = RoundProposal::build(&plan, &config).unwrap();
 
-        let approve = hex::decode(&proposal.transactions[0].data[2..]).unwrap();
-        let deposit = hex::decode(&proposal.transactions[1].data[2..]).unwrap();
+        let approve = hex::decode(&proposal.instructions[0].data).unwrap();
+        let deposit = hex::decode(&proposal.instructions[1].data).unwrap();
 
-        // approve(address,uint256): the amount is the second word.
-        let approved = u128::from_be_bytes(approve[52..68].try_into().unwrap());
-        // deposit(bytes16,bytes32,address,uint256): the amount is the fourth.
-        let deposited = u128::from_be_bytes(deposit[116..132].try_into().unwrap());
+        // Approve: a tag byte, then the amount.
+        let approved = u64::from_le_bytes(approve[1..9].try_into().unwrap());
+        // deposit: discriminator, plan id, root, then the amount.
+        let deposited = u64::from_le_bytes(deposit[56..64].try_into().unwrap());
 
         assert_eq!(approved, deposited);
-        assert_eq!(approved, proposal.total.base_units());
+        assert_eq!(u128::from(approved), proposal.total.base_units());
     }
 
     #[test]
     fn a_round_with_no_chain_configured_says_which_setting_is_missing() {
         let (plan, mut config) = plan_and_config();
-        config.settlement.chain_id = None;
+        config.settlement.cluster = None;
         let error = RoundProposal::build(&plan, &config)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("settlement.chain_id"), "{error}");
+        assert!(error.contains("settlement.cluster"), "{error}");
 
         let (plan, mut config) = plan_and_config();
-        config.settlement.contract = None;
+        config.settlement.program_id = None;
         let error = RoundProposal::build(&plan, &config)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("settlement.contract"), "{error}");
+        assert!(error.contains("settlement.program_id"), "{error}");
     }
 
     /// Refusing beats guessing: a native-coin deposit is a different call.
@@ -286,6 +392,6 @@ mod tests {
         let error = RoundProposal::build(&plan, &config)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("native-coin rounds"), "{error}");
+        assert!(error.contains("native SOL"), "{error}");
     }
 }

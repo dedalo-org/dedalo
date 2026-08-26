@@ -20,25 +20,38 @@ use dedalo::storage::ledger::Ledger;
 use dedalo::testing::TempRepo;
 use dedalo::{Engine, SettlementOptions};
 use proptest::prelude::*;
-use sha3::{Digest, Keccak256};
 
 // ---------------------------------------------------------------------------
 // fixtures
 // ---------------------------------------------------------------------------
 
-fn address(nibble: &str) -> Address {
-    Address::parse(&format!("0x{}", nibble.repeat(40 / nibble.len()))).unwrap()
+/// A distinct, on-curve address for a fixture.
+///
+/// Built from bytes rather than written out, so a fixture cannot accidentally
+/// be two names for one account — which is the defect
+/// `one_account_listed_many_times_receives_one_transfer` exists to catch and
+/// would be embarrassing to reintroduce in the fixtures themselves.
+fn address(tag: u8) -> Address {
+    let mut raw = [tag; 32];
+    for nudge in 0..=u8::MAX {
+        raw[31] = nudge;
+        let candidate = Address::from_pubkey_bytes(raw);
+        if candidate.is_on_curve() {
+            return candidate;
+        }
+    }
+    unreachable!("some nudge of the last byte lands on the curve")
 }
 
 fn config_with(contributors: usize) -> Config {
     let mut config = Config::template("adversarial");
     config.asset = Asset::native("TEST", "testnet", 6);
-    config.wallets.source = address("1");
-    config.wallets.treasury = address("2");
-    config.wallets.open_collective = address("3");
+    config.wallets.source = address(1);
+    config.wallets.treasury = address(2);
+    config.wallets.open_collective = address(3);
     config.identities = (0..contributors)
         .map(|i| {
-            Identity::parse(format!("dev{i}"), &format!("0x{:040x}", i + 0xa0))
+            Identity::parse(format!("dev{i}"), &address((i + 0xa0) as u8).to_string())
                 .unwrap()
                 .with_email(format!("dev{i}@example.com"))
         })
@@ -184,7 +197,7 @@ fn changing_any_covered_field_changes_the_id() {
     mutations.push(("asset.decimals", m));
 
     let mut m = baseline.clone();
-    m.asset.contract = Some(address("7").to_string());
+    m.asset.contract = Some(address(7).to_string());
     mutations.push(("asset.contract", m));
 
     let mut m = baseline.clone();
@@ -224,7 +237,7 @@ fn changing_any_covered_field_changes_the_id() {
     mutations.push(("items[0].amount", m));
 
     let mut m = baseline.clone();
-    m.items[0].wallet = address("9");
+    m.items[0].wallet = address(9);
     mutations.push(("items[0].wallet", m));
 
     let mut m = baseline.clone();
@@ -320,29 +333,20 @@ proptest! {
 // addresses: the one mistake that cannot be undone
 // ---------------------------------------------------------------------------
 
-/// FOUND: wallets were compared as strings, so EIP-55 capitalisation made one
-/// contributor with two spellings of one address receive two transfers.
+/// FOUND: wallets were compared as strings, so one contributor with two
+/// spellings of one address received two transfers.
+///
+/// base58 has one encoding per value, so an account has exactly one spelling
+/// and the original defect cannot recur. What replaced it is the mirror image,
+/// below.
 #[test]
-fn one_account_spelled_many_ways_receives_one_transfer() {
-    let body = "abcdef0000000000000000000000000000000001";
-    let spellings = [
-        format!("0x{body}"),
-        format!("0X{}", body.to_uppercase()),
-        format!(
-            "0x{}",
-            Address::parse(&format!("0x{body}"))
-                .unwrap()
-                .as_str()
-                .trim_start_matches("0x")
-        ),
-    ];
+fn one_account_listed_many_times_receives_one_transfer() {
+    let wallet = "So11111111111111111111111111111111111111112";
 
     let mut config = config_with(0);
-    config.identities = spellings
-        .iter()
-        .enumerate()
-        .map(|(i, w)| {
-            Identity::parse(format!("dev{i}"), w)
+    config.identities = (0..3)
+        .map(|i| {
+            Identity::parse(format!("dev{i}"), wallet)
                 .unwrap()
                 .with_email(format!("dev{i}@example.com"))
         })
@@ -353,7 +357,7 @@ fn one_account_spelled_many_ways_receives_one_transfer() {
     assert_eq!(
         plan.contributors().count(),
         1,
-        "three spellings of one account produced {} transfers",
+        "three identities on one wallet produced {} transfers",
         plan.contributors().count()
     );
     assert_eq!(
@@ -364,127 +368,186 @@ fn one_account_spelled_many_ways_receives_one_transfer() {
     plan.verify().unwrap();
 }
 
-/// EIP-55, implemented here from the specification.
+/// The mirror of the defect above, and the one that would be introduced by
+/// carrying the EVM's habits across.
 ///
-/// The point of a second implementation is that the property below compares
-/// the crate against the standard rather than against itself. A test that
-/// asks the code under test what the right answer is proves nothing.
-fn eip55(lowercase_body: &str) -> String {
-    let hash = Keccak256::digest(lowercase_body.as_bytes());
-    lowercase_body
-        .chars()
-        .enumerate()
-        .map(|(index, c)| {
-            if !c.is_ascii_alphabetic() {
-                return c;
-            }
-            let nibble = if index % 2 == 0 {
-                hash[index / 2] >> 4
-            } else {
-                hash[index / 2] & 0x0f
-            };
-            if nibble >= 8 {
-                c.to_ascii_uppercase()
-            } else {
-                c
-            }
-        })
-        .collect()
+/// EIP-55 put a checksum in an address's capitalisation, so comparison there
+/// had to fold case. base58 is case-**sensitive**: two strings differing only
+/// in case are two unrelated accounts. Folding case here would silently pay
+/// one person twice and the other never.
+#[test]
+fn two_accounts_differing_only_in_case_are_not_merged() {
+    // Searched for rather than hardcoded, so this keeps testing the property
+    // and not one lucky pair.
+    let mut raw = [0u8; 32];
+    let mut found = None;
+    for byte in 0..=u8::MAX {
+        raw[0] = byte;
+        let candidate = Address::from_pubkey_bytes(raw).to_string();
+        let flipped: String = candidate
+            .chars()
+            .map(|c| {
+                if c.is_ascii_uppercase() {
+                    c.to_ascii_lowercase()
+                } else {
+                    c.to_ascii_uppercase()
+                }
+            })
+            .collect();
+        if flipped == candidate {
+            continue;
+        }
+        if let Ok(other) = Address::parse(&flipped) {
+            found = Some((Address::parse(&candidate).unwrap(), other));
+            break;
+        }
+    }
+
+    let (a, b) = found.expect("some address flips case into another valid address");
+    assert_ne!(a.as_str(), b.as_str());
+    assert_eq!(
+        a.as_str().to_ascii_lowercase(),
+        b.as_str().to_ascii_lowercase(),
+        "the pair must be indistinguishable once case is folded"
+    );
+    assert_ne!(a.key(), b.key(), "folding case would merge two accounts");
+    assert_ne!(a, b, "and they must not compare equal");
 }
 
-/// FOUND: the property below used to assert that *every* single-character
-/// mutation is rejected. It is not, and cannot be.
+/// base58 decoding, implemented here from the definition.
 ///
-/// EIP-55 carries its checksum in the capitalisation of the letters only, so
-/// an address holds one bit per character in `a-f`. A mutation that happens
-/// to land on another correctly-capitalised spelling is a valid address, and
-/// no implementation can tell the difference. These two were found by the
-/// property test on CI, at 7 and 10 bits of checksum respectively.
-///
-/// They are pinned here so the limit stays visible: this is what "the
-/// checksum protects you" actually buys.
-#[test]
-fn some_single_character_slips_survive_the_checksum() {
-    for (original, position, replacement, bits) in [
-        (
-            "0x983703886C8736b9844641B9c94DAFa572291812",
-            22usize,
-            '2',
-            7,
-        ),
-        (
-            "0x9d33df7B2951b0086D40814475869BE3A485a146",
-            8usize,
-            '1',
-            10,
-        ),
-    ] {
-        let mut hex: Vec<char> = original[2..].chars().collect();
-        assert_ne!(
-            hex[position], replacement,
-            "the mutation must change something"
-        );
-        hex[position] = replacement;
-        let candidate: String = hex.into_iter().collect();
+/// The point of a second implementation is that the properties below compare
+/// the crate against the encoding rather than against itself. A test that asks
+/// the code under test what the right answer is proves nothing.
+fn base58_decode(value: &str) -> Option<Vec<u8>> {
+    const ALPHABET: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
-        // Independently: this really is a well-formed EIP-55 address.
-        assert_eq!(
-            eip55(&candidate.to_ascii_lowercase()),
-            candidate,
-            "the mutation was expected to land on a valid checksum"
-        );
-
-        let parsed = Address::parse(&format!("0x{candidate}"))
-            .expect("a validly checksummed address must parse");
-        assert_eq!(parsed.checksum_bits(), bits);
-        assert_ne!(parsed.as_str(), original, "it is a different account");
+    let mut bytes: Vec<u8> = vec![0];
+    for c in value.chars() {
+        let digit = ALPHABET.iter().position(|a| *a as char == c)? as u32;
+        // bytes = bytes * 58 + digit, big-endian, by hand.
+        let mut carry = digit;
+        for byte in bytes.iter_mut().rev() {
+            let value = u32::from(*byte) * 58 + carry;
+            *byte = (value & 0xff) as u8;
+            carry = value >> 8;
+        }
+        while carry > 0 {
+            bytes.insert(0, (carry & 0xff) as u8);
+            carry >>= 8;
+        }
     }
+
+    // Each leading `1` is one leading zero byte.
+    let leading = value.chars().take_while(|c| *c == '1').count();
+    while bytes.first() == Some(&0) {
+        bytes.remove(0);
+    }
+    let mut out = vec![0u8; leading];
+    out.extend(bytes);
+    Some(out)
+}
+
+/// The measurement this project owes anyone who reads "addresses are
+/// validated".
+///
+/// Under EIP-55 a mistyped address was usually rejected — around fifteen bits
+/// of checksum hidden in the capitalisation, and the pinned counterexamples
+/// here were the *exceptions*. **A Solana address has no checksum at all.**
+/// Every thirty-two byte value is a valid key, so a slip is caught only when
+/// it changes the decoded length.
+///
+/// So this test does not pin exceptions. It measures the rule, and asserts the
+/// number is bad, because a number nobody has looked at is how "validated"
+/// turns into a word people trust.
+#[test]
+fn most_single_character_slips_produce_another_valid_address() {
+    const ALPHABET: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+    let original = "So11111111111111111111111111111111111111112";
+    let chars: Vec<char> = original.chars().collect();
+
+    let mut tried = 0usize;
+    let mut accepted = 0usize;
+    for position in 0..chars.len() {
+        for replacement in ALPHABET {
+            let replacement = *replacement as char;
+            if replacement == chars[position] {
+                continue;
+            }
+            let mut mutated = chars.clone();
+            mutated[position] = replacement;
+            let candidate: String = mutated.into_iter().collect();
+            tried += 1;
+            if let Ok(parsed) = Address::parse(&candidate) {
+                accepted += 1;
+                assert_ne!(
+                    parsed.as_str(),
+                    original,
+                    "a mutation must not decode back to the original"
+                );
+            }
+        }
+    }
+
+    let survived = accepted * 100 / tried;
+    assert!(
+        survived > 50,
+        "expected most slips to survive — the point of this test is that they \
+         do. {accepted} of {tried} ({survived}%)"
+    );
 }
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(256))]
 
-    /// A mutated address must be accepted exactly when EIP-55 says it is
-    /// valid, and rejected otherwise.
+    /// Validity is decided by the encoding alone, and this crate must agree
+    /// with an independent decoder in both directions.
     ///
-    /// This is the strongest true statement available. "Always rejected" is
-    /// false — see `some_single_character_slips_survive_the_checksum` — and
-    /// "usually rejected" would pass while a validator quietly accepted
-    /// everything. Agreeing with an independent implementation, in both
-    /// directions, catches both.
+    /// "Usually rejected" would pass while a validator quietly accepted
+    /// everything, and "always rejected" is false — there is nothing to reject
+    /// a well-formed address for. Agreeing with a second implementation is the
+    /// strongest true statement available.
     #[test]
-    fn a_mutated_address_parses_exactly_when_its_checksum_is_valid(
-        seed in prop::array::uniform20(any::<u8>()),
-        position in 0usize..40,
-        replacement in 0u8..16,
+    fn an_address_is_accepted_exactly_when_it_decodes_to_thirty_two_bytes(
+        seed in prop::array::uniform32(any::<u8>()),
+        position in 0usize..32,
+        replacement in 0u8..58,
     ) {
-        let body: String = seed.iter().map(|b| format!("{b:02x}")).collect();
-        let checksummed = Address::parse(&format!("0x{body}")).unwrap().to_string();
-        let hex: Vec<char> = checksummed[2..].chars().collect();
+        const ALPHABET: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
-        let new_char = char::from_digit(replacement as u32, 16).unwrap();
-        // Only a genuine change counts; same digit in either case is not a typo.
-        prop_assume!(!hex[position].eq_ignore_ascii_case(&new_char));
+        let original = Address::from_pubkey_bytes(seed).to_string();
+        let chars: Vec<char> = original.chars().collect();
+        prop_assume!(position < chars.len());
 
-        let mut mutated = hex.clone();
+        let new_char = ALPHABET[replacement as usize] as char;
+        prop_assume!(new_char != chars[position]);
+
+        let mut mutated = chars.clone();
         mutated[position] = new_char;
         let candidate: String = mutated.into_iter().collect();
 
-        // A body that ends up all-one-case carries no checksum by definition,
-        // and is accepted on its shape alone.
-        let letters: Vec<char> = candidate.chars().filter(|c| c.is_ascii_alphabetic()).collect();
-        let uniform = letters.is_empty()
-            || letters.iter().all(|c| c.is_ascii_lowercase())
-            || letters.iter().all(|c| c.is_ascii_uppercase());
-        prop_assume!(!uniform);
+        let decoded = base58_decode(&candidate);
+        let should_parse = decoded.as_ref().is_some_and(|d| d.len() == 32);
 
-        let valid = eip55(&candidate.to_ascii_lowercase()) == candidate;
         prop_assert_eq!(
-            Address::parse(&format!("0x{candidate}")).is_ok(),
-            valid,
-            "changing position {} of {} to `{}`: EIP-55 says valid={}",
-            position, checksummed, new_char, valid
+            Address::parse(&candidate).is_ok(),
+            should_parse,
+            "changing position {} of {} to `{}`: independent decode says 32 bytes = {}",
+            position, original, new_char, should_parse
         );
+    }
+
+    /// The independent decoder and the crate agree on what the bytes are, not
+    /// merely on whether they exist.
+    #[test]
+    fn the_crate_and_an_independent_decoder_read_the_same_bytes(
+        seed in prop::array::uniform32(any::<u8>()),
+    ) {
+        let address = Address::from_pubkey_bytes(seed);
+        let decoded = base58_decode(address.as_str()).expect("a written address decodes");
+        prop_assert_eq!(&decoded[..], &seed[..]);
+        prop_assert_eq!(address.pubkey_bytes().unwrap(), seed);
     }
 
     /// Whatever anyone types, parsing decides — it never panics.

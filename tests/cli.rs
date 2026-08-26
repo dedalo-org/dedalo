@@ -7,7 +7,6 @@
 
 use assert_cmd::Command;
 use dedalo::testing::TempRepo;
-use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use serde_json::Value;
 use std::path::Path;
@@ -34,18 +33,18 @@ fn project() -> TempRepo {
     let config = std::fs::read_to_string(&config_path).unwrap();
     let config = config
         .replacen(
-            "source = \"0x0000000000000000000000000000000000000000\"",
-            "source = \"0x1111111111111111111111111111111111111111\"",
+            "source = \"11111111111111111111111111111111\"",
+            "source = \"So11111111111111111111111111111111111111112\"",
             1,
         )
         .replacen(
-            "treasury = \"0x0000000000000000000000000000000000000000\"",
-            "treasury = \"0x2222222222222222222222222222222222222222\"",
+            "treasury = \"11111111111111111111111111111111\"",
+            "treasury = \"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA\"",
             1,
         )
         .replacen(
-            "open_collective = \"0x0000000000000000000000000000000000000000\"",
-            "open_collective = \"0x3333333333333333333333333333333333333333\"",
+            "open_collective = \"11111111111111111111111111111111\"",
+            "open_collective = \"ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL\"",
             1,
         );
     std::fs::write(&config_path, config).unwrap();
@@ -53,12 +52,12 @@ fn project() -> TempRepo {
     for (handle, wallet, email) in [
         (
             "ada",
-            "0xada0000000000000000000000000000000000001",
+            "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
             "ada@example.com",
         ),
         (
             "bea",
-            "0xbea0000000000000000000000000000000000002",
+            "MerkS3LaQBSvM5JZsvBaLZBBSMvMB5aTuLRHrvKAyDo",
             "bea@example.com",
         ),
     ] {
@@ -270,7 +269,7 @@ fn linking_an_identity_preserves_the_config_comments() {
     assert!(config.contains("[[identities]]"));
     // Stored checksummed, whatever case it was typed in.
     assert!(
-        config.contains("0xADa0000000000000000000000000000000000001"),
+        config.contains("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"),
         "the linked address should be stored in its EIP-55 form:\n{config}"
     );
 }
@@ -284,7 +283,7 @@ fn identity_link_is_idempotent_and_remove_undoes_it() {
             "identity",
             "link",
             "ada",
-            "0xada0000000000000000000000000000000000001",
+            "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
             "--email",
             "ada@example.com",
         ])
@@ -446,59 +445,76 @@ fn help_and_version_work_without_a_project() {
         .stdout(contains("Dedalo reads merge history from git"));
 }
 
-/// An address with few hex letters carries few bits of checksum, and a typo
-/// in one is likelier to parse than a user would guess. `identity link` is
-/// the only moment a human chooses an address, so it is the only place worth
-/// saying so.
+/// `identity link` is the only moment a human chooses an address, so it is the
+/// only place worth saying what the address layer can and cannot catch.
+///
+/// Under EIP-55 that was a variable number of bits and the warning fired below
+/// a threshold. A Solana address carries **no checksum at all**, so there is no
+/// threshold and no quiet case: either it warns every time, or the address
+/// layer has changed and this test should fail.
 #[test]
-fn linking_a_weakly_checksummed_address_warns_and_reports_the_bits() {
+fn linking_an_address_warns_that_there_is_no_checksum_to_rely_on() {
     let repo = project();
 
-    // Seven hex letters, so seven bits: about one typo in 128 still parses.
-    // Found by the adversarial property test, and pinned there too.
-    let weak = "0x983703886C8736b984464129c94DAFa572291812";
+    let wallet = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
     dedalo(repo.path())
         .args([
             "identity",
             "link",
-            "weak",
-            weak,
+            "ada",
+            wallet,
             "--email",
-            "weak@example.com",
+            "ada@example.com",
         ])
         .assert()
         .success()
-        .stderr(contains("7 bits of checksum"))
-        .stderr(contains("1 in 128"));
+        .stderr(contains("no checksum"));
 
     let linked = json_of(
         repo.path(),
         &[
             "identity",
             "link",
-            "weak",
-            weak,
+            "ada",
+            wallet,
             "--email",
-            "weak@example.com",
+            "ada@example.com",
         ],
     );
-    assert_eq!(linked["checksum_bits"], 7);
+    assert_eq!(linked["checksum_bits"], 0);
+}
 
-    // A well-populated address says nothing: a warning that always fires is
-    // a warning nobody reads.
-    let strong = "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB";
+/// A share can only be claimed by whoever can sign for the address it names.
+/// An off-curve address has no keypair, so linking one would create a
+/// contributor who can never be paid — and the plan would not report it,
+/// because as far as the plan is concerned they have a wallet.
+#[test]
+fn linking_an_address_nobody_can_sign_for_is_refused() {
+    let repo = project();
+
+    // Found rather than hardcoded: roughly half of all byte patterns are not
+    // curve points, and which ones is not a thing to memorise.
+    let mut raw = [0u8; 32];
+    let off_curve = (0..=u8::MAX)
+        .find_map(|byte| {
+            raw[0] = byte;
+            let candidate = dedalo::chain::wallet::Address::from_pubkey_bytes(raw);
+            (!candidate.is_on_curve()).then(|| candidate.to_string())
+        })
+        .expect("some byte pattern is off the curve");
+
     dedalo(repo.path())
         .args([
             "identity",
             "link",
-            "strong",
-            strong,
+            "pda",
+            &off_curve,
             "--email",
-            "strong@example.com",
+            "pda@example.com",
         ])
         .assert()
-        .success()
-        .stderr(contains("bits of checksum").not());
+        .failure()
+        .stderr(contains("not a wallet"));
 }
 
 /// The ledger is a hash chain, and `dedalo verify` is what makes that worth
@@ -550,7 +566,7 @@ fn a_pre_chain_ledger_stops_the_cli_until_it_is_migrated() {
     std::fs::write(
         dir.join("ledger.jsonl"),
         "{\"event\":\"settled\",\"at\":1,\"plan_id\":\"ded1f643ee0b221a82c5b7fce39c04d0d591\",\
-         \"backend\":\"evm\",\"total\":\"5000\",\"dry_run\":false}\n",
+         \"backend\":\"solana\",\"total\":\"5000\",\"dry_run\":false}\n",
     )
     .unwrap();
 
@@ -585,15 +601,15 @@ fn a_pre_chain_ledger_stops_the_cli_until_it_is_migrated() {
 fn propose_emits_an_approval_then_a_deposit_and_signs_nothing() {
     let repo = project();
 
-    // A round needs a chain and a claim contract to be proposed at all.
+    // A round needs a cluster and a claim program to be proposed at all.
     let config_path = repo.path().join("dedalo.toml");
     let config = std::fs::read_to_string(&config_path).unwrap();
     std::fs::write(
         &config_path,
         config.replacen(
             "backend = \"dry-run\"",
-            "backend = \"evm\"\nchain_id = 8453\n\
-             contract = \"0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb\"",
+            "backend = \"solana\"\ncluster = \"devnet\"\n\
+             program_id = \"MerkS3LaQBSvM5JZsvBaLZBBSMvMB5aTuLRHrvKAyDo\"",
             1,
         ),
     )
@@ -601,21 +617,45 @@ fn propose_emits_an_approval_then_a_deposit_and_signs_nothing() {
 
     let proposal = json_of(repo.path(), &["propose", "--amount", "1000"]);
 
-    assert_eq!(proposal["transactions"].as_array().unwrap().len(), 2);
-    assert_eq!(proposal["transactions"][0]["step"], 1);
-    assert_eq!(proposal["transactions"][1]["step"], 2);
-    assert_eq!(proposal["transactions"][0]["chain_id"], 8453);
+    assert_eq!(proposal["instructions"].as_array().unwrap().len(), 2);
+    assert_eq!(proposal["instructions"][0]["step"], 1);
+    assert_eq!(proposal["instructions"][1]["step"], 2);
+    assert_eq!(proposal["instructions"][0]["cluster"], "devnet");
 
-    // approve(address,uint256) then deposit(bytes16,bytes32,address,uint256).
-    let approve = proposal["transactions"][0]["data"].as_str().unwrap();
-    let deposit = proposal["transactions"][1]["data"].as_str().unwrap();
-    assert!(approve.starts_with("0x095ea7b3"), "{approve}");
-    assert!(deposit.starts_with("0xfae389aa"), "{deposit}");
+    // The two instructions belong to two different programs, which is the
+    // thing a signer most needs to see: an approval the token program will
+    // execute, and a deposit the claim program will.
+    assert_eq!(
+        proposal["instructions"][0]["program_id"],
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+    );
+    assert_eq!(
+        proposal["instructions"][1]["program_id"],
+        proposal["claim_program"]
+    );
 
-    // The root is a bytes32, and it is what the deposit carries.
+    // SPL Token dispatches Approve on a leading 4.
+    let approve = proposal["instructions"][0]["data"].as_str().unwrap();
+    let deposit = proposal["instructions"][1]["data"].as_str().unwrap();
+    assert!(approve.starts_with("04"), "{approve}");
+
+    // The root is thirty-two bytes, and it is what the deposit carries.
     let root = proposal["merkle_root"].as_str().unwrap();
     assert_eq!(root.len(), 2 + 64, "{root}");
     assert!(deposit.contains(root.trim_start_matches("0x")), "{deposit}");
+
+    // Every account is either named or explained. A blank is something a
+    // signer would have to invent.
+    for step in proposal["instructions"].as_array().unwrap() {
+        let accounts = step["accounts"].as_array().unwrap();
+        assert!(!accounts.is_empty());
+        for account in accounts {
+            assert!(
+                account["address"].is_string() || account["derivation"].is_string(),
+                "an account is neither named nor derived: {account}"
+            );
+        }
+    }
 
     // Nothing anywhere is a signature or a key.
     let raw = proposal.to_string();
@@ -626,7 +666,7 @@ fn propose_emits_an_approval_then_a_deposit_and_signs_nothing() {
 
 /// The backend that used to promise a broadcast now says why there is none.
 #[test]
-fn settling_through_evm_explains_that_dedalo_holds_no_key() {
+fn settling_through_solana_explains_that_dedalo_holds_no_key() {
     let repo = project();
     let config_path = repo.path().join("dedalo.toml");
     let config = std::fs::read_to_string(&config_path).unwrap();
@@ -634,8 +674,8 @@ fn settling_through_evm_explains_that_dedalo_holds_no_key() {
         &config_path,
         config.replacen(
             "backend = \"dry-run\"",
-            "backend = \"evm\"\nchain_id = 8453\n\
-             contract = \"0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb\"",
+            "backend = \"solana\"\ncluster = \"devnet\"\n\
+             program_id = \"MerkS3LaQBSvM5JZsvBaLZBBSMvMB5aTuLRHrvKAyDo\"",
             1,
         ),
     )

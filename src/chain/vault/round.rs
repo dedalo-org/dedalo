@@ -16,8 +16,8 @@ use crate::money::Amount;
 pub struct Round {
     /// Root of the tree of `(index, account, amount)` leaves.
     pub root: Hash,
-    /// Token being distributed, as the twenty bytes a chain holds.
-    pub token: [u8; 20],
+    /// Token mint being distributed, as the thirty-two bytes a chain holds.
+    pub token: [u8; 32],
     /// Sum of every claim in the tree.
     pub total: Amount,
     /// How much has been claimed so far.
@@ -25,7 +25,7 @@ pub struct Round {
     /// When the claim window closes, as a unix timestamp.
     pub expiry: u64,
     /// Who funded it, and the only account a sweep may pay.
-    pub depositor: [u8; 20],
+    pub depositor: [u8; 32],
 }
 
 impl Round {

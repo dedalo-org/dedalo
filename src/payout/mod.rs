@@ -442,14 +442,14 @@ mod tests {
     fn setup() -> (Config, Attribution) {
         let mut config = Config::template("dedalo");
         config.wallets.treasury =
-            Address::parse("0x2222222222222222222222222222222222222222").unwrap();
+            Address::parse("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA").unwrap();
         config.wallets.open_collective =
-            Address::parse("0x3333333333333333333333333333333333333333").unwrap();
+            Address::parse("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL").unwrap();
         config.identities = vec![
-            Identity::parse("ada", "0x00000000000000000000000000000000000000ad")
+            Identity::parse("ada", "So11111111111111111111111111111111111111112")
                 .unwrap()
                 .with_email("ada@x.io"),
-            Identity::parse("bea", "0x00000000000000000000000000000000000000be")
+            Identity::parse("bea", "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
                 .unwrap()
                 .with_email("bea@x.io"),
         ];
@@ -539,7 +539,7 @@ mod tests {
     fn one_wallet_receives_a_single_transfer() {
         let (mut config, mut attribution) = setup();
         config.identities.push(
-            Identity::parse("ada-work", "0x00000000000000000000000000000000000000ad")
+            Identity::parse("ada-work", "So11111111111111111111111111111111111111112")
                 .unwrap()
                 .with_email("ada@work.io"),
         );
@@ -558,7 +558,7 @@ mod tests {
         .build()
         .unwrap();
 
-        let ada = Address::parse("0x00000000000000000000000000000000000000ad").unwrap();
+        let ada = Address::parse("So11111111111111111111111111111111111111112").unwrap();
         assert_eq!(plan.items.iter().filter(|i| i.wallet == ada).count(), 1);
         plan.verify().unwrap();
     }

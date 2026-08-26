@@ -105,17 +105,21 @@ pub struct Wallets {
 /// How a verified plan reaches a chain.
 #[serde(default, deny_unknown_fields)]
 pub struct SettlementConfig {
-    /// Backend id: `dry-run` (default) or `evm`.
+    /// Backend id: `dry-run` (default) or `solana`.
     pub backend: String,
-    /// JSON-RPC endpoint of the chain.
+    /// JSON-RPC endpoint of the cluster.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rpc_url: Option<String>,
-    /// EIP-155 chain id, checked against the endpoint before signing.
+    /// Which cluster: `mainnet-beta`, `devnet` or `testnet`.
+    ///
+    /// Named rather than inferred from `rpc_url`, because a proposal says
+    /// which network it is for and a signer should not have to recognise an
+    /// endpoint to know.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub chain_id: Option<u64>,
-    /// Claim contract a round is deposited into.
+    pub cluster: Option<String>,
+    /// Claim program a round is deposited into.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub contract: Option<String>,
+    pub program_id: Option<String>,
 }
 
 impl Default for SettlementConfig {
@@ -123,8 +127,8 @@ impl Default for SettlementConfig {
         Self {
             backend: "dry-run".into(),
             rpc_url: None,
-            chain_id: None,
-            contract: None,
+            cluster: None,
+            program_id: None,
         }
     }
 }
@@ -143,8 +147,12 @@ impl Config {
             asset: Asset {
                 symbol: "USDC".into(),
                 decimals: 6,
-                chain: "base".into(),
-                contract: Some("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913".into()),
+                // devnet, not mainnet-beta. A template that names a real
+                // network is a template somebody points at real money before
+                // anything has been audited, and `init` writes this file for
+                // people who have not read the architecture document yet.
+                chain: "devnet".into(),
+                contract: Some("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU".into()),
             },
             fees: FeeSchedule::default(),
             wallets: Wallets {

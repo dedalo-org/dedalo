@@ -284,20 +284,16 @@ jobs:
       - name: exhaustive proofs
         run: cargo test --locked --release --all-features -- --ignored
 
-      - name: Install the wasm target and brotli
-        run: |
-          set -euo pipefail
-          rustup target add wasm32-unknown-unknown
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends brotli
-
-      # The vault compiles to WebAssembly for Arbitrum Stylus, which rejects
-      # anything over twenty-four kilobytes compressed. A contract that cannot
-      # be deployed is not a contract, so the size is measured rather than
-      # assumed — and it is the compressed size, which nobody eyeballs from
-      # the source.
-      - name: deployable stays deployable
-        run: scripts/check-contract.py
+      # A "deployable stays deployable" step used to follow, measuring the
+      # Stylus contract against the 24 KiB Arbitrum compresses it to. Both are
+      # gone: the chain is Solana, and the claim program that replaces the
+      # binding is not written. `chain::vault` still holds every rule it must
+      # enforce, so what is missing is a binding, not a specification.
+      #
+      # The step is absent rather than passing over nothing. A gate reporting
+      # "pass" for an artifact that does not exist is worse than one visibly
+      # missing, and `verification.toml` keeps an empty [contracts] table so a
+      # program cannot reappear without someone declaring how it is measured.
 
   # A single gate for branch protection, so adding a job above does not
   # require reconfiguring the repository.

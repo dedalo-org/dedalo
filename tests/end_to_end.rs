@@ -18,15 +18,16 @@ use dedalo::{Engine, payout::PayeeKind};
 fn config_for(repo: &TempRepo) -> Config {
     let mut config = Config::template("demo");
     config.project.open_collective = Some("demo-collective".into());
-    config.wallets.source = Address::parse("0x1111111111111111111111111111111111111111").unwrap();
-    config.wallets.treasury = Address::parse("0x2222222222222222222222222222222222222222").unwrap();
+    config.wallets.source = Address::parse("So11111111111111111111111111111111111111112").unwrap();
+    config.wallets.treasury =
+        Address::parse("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA").unwrap();
     config.wallets.open_collective =
-        Address::parse("0x3333333333333333333333333333333333333333").unwrap();
+        Address::parse("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL").unwrap();
     config.identities = vec![
-        Identity::parse("ada", "0x00000000000000000000000000000000000000ad")
+        Identity::parse("ada", "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU")
             .unwrap()
             .with_email("ada@example.com"),
-        Identity::parse("bea", "0x00000000000000000000000000000000000000be")
+        Identity::parse("bea", "MerkS3LaQBSvM5JZsvBaLZBBSMvMB5aTuLRHrvKAyDo")
             .unwrap()
             .with_email("bea@example.com"),
     ];
@@ -107,7 +108,7 @@ fn full_round_pays_contributors_treasury_and_protocol() {
         .unwrap();
     assert_eq!(
         protocol.wallet,
-        Address::parse("0x3333333333333333333333333333333333333333").unwrap()
+        Address::parse("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL").unwrap()
     );
     assert_eq!(protocol.amount, gross.bps(250).unwrap());
 

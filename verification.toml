@@ -95,13 +95,21 @@ module that decides who is owed what look arithmetic-free."""
 method = "property"
 arithmetic_sites = 0
 harnesses = [
-  "adversarial::a_mutated_address_parses_exactly_when_its_checksum_is_valid",
+  "adversarial::an_address_is_accepted_exactly_when_it_decodes_to_thirty_two_bytes",
+  "adversarial::the_crate_and_an_independent_decoder_read_the_same_bytes",
+  "adversarial::two_accounts_differing_only_in_case_are_not_merged",
   "adversarial::address_parsing_never_panics",
 ]
 notes = """
 No arithmetic, but it decides *where* money lands, so it may not be exempt. \
-The property compares against an independent EIP-55 implementation in both \
-directions."""
+The properties compare against an independent base58 decoder in both \
+directions — that an address is accepted exactly when it decodes to \
+thirty-two bytes, and that both read the same bytes out of it.
+
+There is no checksum to verify against, and that is the finding rather than a \
+gap in the method: `most_single_character_slips_produce_another_valid_address` \
+measures how many typos survive and asserts the number is bad, so \"addresses \
+are validated\" cannot be read as more than it is."""
 
 [modules."storage/ledger"]
 method = "property"
@@ -115,7 +123,7 @@ The only place outside `payout` that accumulates rather than carries: \
 
 [modules."chain/vault"]
 method = "tests"
-arithmetic_sites = 4
+arithmetic_sites = 5
 notes = """
 The rules a deployed vault enforces, and the one part of this system that \
 cannot be patched after it ships. Thirteen tests, one per way it must refuse: \
@@ -146,19 +154,26 @@ notes = """
 No arithmetic, but an id here becomes a filesystem path. The unit tests \
 enumerate the hostile shapes rather than sample them."""
 
-[modules."chain/settlement/abi"]
+[modules."chain/settlement/instruction"]
 method = "tests"
 arithmetic_sites = 1
 notes = """
-Carries amounts into calldata; it does not decide them. The encoder is \
-`alloy-sol-types` rather than hand-written, and the selectors are still \
-checked against the canonical published values so swapping the library out \
-cannot silently change what a signer is asked to sign."""
+Carries amounts into instruction data; it does not decide them. Borsh has no \
+alignment rules, so unlike the ABI encoder it replaced this is written by hand \
+and the layout is asserted byte by byte rather than trusted to a library.
+
+The two arithmetic sites are the `u64` conversions. They are refusals, not \
+conversions: an SPL token balance is a `u64`, and an amount that does not fit \
+is rejected rather than truncated, because a truncated amount produces an \
+instruction that executes and moves the wrong number."""
 
 [modules."chain/settlement/proposal"]
 method = "tests"
-arithmetic_sites = 2
-notes = "Reads the tree's total and encodes it. Decides nothing."
+arithmetic_sites = 0
+notes = """
+Reads the tree's total and hands it to the encoder. Decides nothing, and no \
+longer touches an amount at all: the `u64` refusal that used to live here \
+moved into `chain/settlement/instruction`, where the encoding is."""
 
 [modules."chain/settlement/dry_run"]
 method = "tests"
@@ -216,10 +231,15 @@ method = "exempt"
 arithmetic_sites = 0
 reason = "The backend trait and its selector."
 
-[modules."chain/settlement/evm"]
-method = "exempt"
+[modules."chain/settlement/solana"]
+method = "tests"
 arithmetic_sites = 0
-reason = "Validates chain settings and refuses to broadcast. Moves nothing."
+notes = """
+Was exempt, and the manifest gate refused to let it stay so: it now parses the \
+configured program id as an `Address`, and a module that builds an address \
+decides *where* even when it decides no amount. A program id that is not \
+thirty-two bytes names nothing, and this is where that is caught — before a \
+proposal a signer would be asked to trust."""
 
 [modules.storage]
 method = "exempt"
@@ -291,16 +311,15 @@ reason = "Walks the chain and reports. Reads only."
 
 # ----------------------------------------------------------- deployable ---
 
-[contracts."src/chain/contract"]
-method = "binding"
-target = "wasm32-unknown-unknown"
-# Stylus rejects anything larger, compressed. Measured by `ws-check`, because a
-# contract that cannot be deployed is not a contract.
-max_compressed_kib = 24
-notes = """
-An Arbitrum Stylus contract, and deliberately thin: every rule it enforces is \
-`chain::vault`, which is ordinary Rust and tested here. What is in the crate \
-is the part that cannot be pure — reading storage, moving a token, knowing the \
-time — and a reader checking whether it is correct should end up in `vault`.
+# Empty, and that is the current truth. The Arbitrum Stylus binding was
+# discarded when the chain became Solana: it was written against a 24 KiB
+# compressed budget that no longer applies, and it held raw twenty-byte
+# addresses because of it.
+#
+# The claim program that replaces it is not written. `chain/vault` still holds
+# every rule it must enforce, still pure and still tested over its whole
+# domain, so what is missing is a binding and not a specification. This table
+# stays so that a program cannot reappear without someone declaring how it is
+# verified and what it is measured against.
 
-Unaudited and undeployed. Nothing here has held a coin."""
+[contracts]

@@ -74,6 +74,20 @@ pub enum Refusal {
     #[error("the proof does not match the round's root")]
     BadProof,
 
+    /// The amount does not fit the `u64` an SPL token balance is.
+    ///
+    /// Distinct from [`Refusal::ExceedsRound`], which is about a round having
+    /// less left than a claim asks for. This one is about a number a token
+    /// program cannot represent at all — and it is a refusal rather than a
+    /// truncation because a truncated amount produces a leaf that verifies
+    /// against a proof and pays the wrong number, which is the worst failure
+    /// this vault has.
+    #[error("{amount} does not fit the u64 an SPL token balance is")]
+    AmountNotRepresentable {
+        /// What was claimed.
+        amount: Amount,
+    },
+
     /// The claim is larger than what the round still holds.
     #[error("claim of {amount} exceeds the {remaining} still held")]
     ExceedsRound {
@@ -107,8 +121,8 @@ impl Refusal {
     /// [`Display`](core::fmt::Display) is what a person reads and interpolates
     /// the numbers; this is what a contract reverts with. Formatting a number
     /// on chain means linking the formatting machinery into the deployed
-    /// artifact, and the artifact is paid for by the byte and capped at
-    /// twenty-four kilobytes compressed.
+    /// program, and a program is paid for by the byte at deployment and by the
+    /// compute unit on every call.
     pub const fn reason(&self) -> &'static str {
         match self {
             Refusal::RoundExists => "dedalo: this plan id was already deposited",
@@ -119,6 +133,9 @@ impl Refusal {
             }
             Refusal::AlreadyClaimed => "dedalo: this index was already claimed",
             Refusal::BadProof => "dedalo: the proof does not match the round's root",
+            Refusal::AmountNotRepresentable { .. } => {
+                "dedalo: the amount does not fit a token balance"
+            }
             Refusal::ExceedsRound { .. } => "dedalo: claim exceeds what the round still holds",
             Refusal::NotExpired => "dedalo: the claim window has not closed",
             Refusal::NotDepositor => "dedalo: only the depositor may sweep",
@@ -139,7 +156,7 @@ pub struct Deposited {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Paid {
     /// Where the transfer goes.
-    pub account: [u8; 20],
+    pub account: [u8; 32],
     /// How much.
     pub amount: Amount,
     /// The round, with `claimed` advanced. Store this before transferring:
@@ -152,7 +169,7 @@ pub struct Paid {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Swept {
     /// Where the remainder goes. Always the depositor.
-    pub account: [u8; 20],
+    pub account: [u8; 32],
     /// How much was left.
     pub amount: Amount,
     /// The round, marked fully claimed so a second sweep pays nothing.
@@ -171,10 +188,10 @@ pub struct Swept {
 pub fn deposit(
     existing: Option<&Round>,
     root: Hash,
-    token: [u8; 20],
+    token: [u8; 32],
     total: Amount,
     delivered: Amount,
-    depositor: [u8; 20],
+    depositor: [u8; 32],
     now: u64,
 ) -> Result<Deposited, Refusal> {
     if existing.is_some() {
@@ -218,7 +235,7 @@ pub fn claim(
     round: &Round,
     already_claimed: bool,
     index: u64,
-    account: [u8; 20],
+    account: [u8; 32],
     amount: Amount,
     proof: &[Hash],
 ) -> Result<Paid, Refusal> {
@@ -231,7 +248,13 @@ pub fn claim(
         return Err(Refusal::Inconsistent);
     }
 
-    if !ClaimTree::verify(round.root, leaf_of(index, account, amount), proof) {
+    // The leaf is built from what a token program can actually hold, so an
+    // amount it cannot represent is refused before any proof is checked rather
+    // than silently narrowed into one that verifies.
+    let units = u64::try_from(amount.base_units())
+        .map_err(|_| Refusal::AmountNotRepresentable { amount })?;
+
+    if !ClaimTree::verify(round.root, leaf_of(index, account, units), proof) {
         return Err(Refusal::BadProof);
     }
 
@@ -259,7 +282,7 @@ pub fn claim(
 /// # Errors
 ///
 /// See [`Refusal`].
-pub fn sweep(round: &Round, caller: &[u8; 20], now: u64) -> Result<Swept, Refusal> {
+pub fn sweep(round: &Round, caller: &[u8; 32], now: u64) -> Result<Swept, Refusal> {
     if caller != &round.depositor {
         return Err(Refusal::NotDepositor);
     }
@@ -287,13 +310,13 @@ mod tests {
     use crate::chain::merkle::Claim;
     use crate::chain::wallet::Address as DomainAddress;
 
-    const ALICE: [u8; 20] = [0x11; 20];
-    const BOB: [u8; 20] = [0x22; 20];
-    const TOKEN: [u8; 20] = [0x33; 20];
+    const ALICE: [u8; 32] = [0x11; 32];
+    const BOB: [u8; 32] = [0x22; 32];
+    const TOKEN: [u8; 32] = [0x33; 32];
     const NOW: u64 = 1_700_000_000;
 
-    fn address(raw: [u8; 20]) -> DomainAddress {
-        DomainAddress::from_evm_bytes(raw)
+    fn address(raw: [u8; 32]) -> DomainAddress {
+        DomainAddress::from_pubkey_bytes(raw)
     }
 
     /// A round of three claims, and the tree that proves them.
@@ -303,7 +326,7 @@ mod tests {
             .enumerate()
             .map(|(index, amount)| Claim {
                 index: index as u64,
-                account: address([index as u8 + 1; 20]),
+                account: address([index as u8 + 1; 32]),
                 amount: Amount::from_base_units(*amount),
             })
             .collect();
@@ -324,7 +347,7 @@ mod tests {
             round,
             already,
             entry.index,
-            entry.account.evm_bytes().unwrap(),
+            entry.account.pubkey_bytes().unwrap(),
             entry.amount,
             &tree.proof(index).unwrap(),
         )
@@ -430,7 +453,7 @@ mod tests {
             &round,
             false,
             entry.index,
-            entry.account.evm_bytes().unwrap(),
+            entry.account.pubkey_bytes().unwrap(),
             Amount::from_base_units(999_999),
             &tree.proof(0).unwrap(),
         );
@@ -460,7 +483,7 @@ mod tests {
             &round,
             false,
             entry.index,
-            entry.account.evm_bytes().unwrap(),
+            entry.account.pubkey_bytes().unwrap(),
             entry.amount,
             &tree.proof(1).unwrap(),
         );
@@ -482,7 +505,7 @@ mod tests {
             &nearly_empty,
             false,
             entry.index,
-            entry.account.evm_bytes().unwrap(),
+            entry.account.pubkey_bytes().unwrap(),
             entry.amount,
             &tree.proof(2).unwrap(),
         );

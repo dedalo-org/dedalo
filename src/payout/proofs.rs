@@ -32,16 +32,39 @@ fn fees() -> impl Strategy<Value = FeeSchedule> {
 }
 
 /// Build a config whose wallets and identities cover `contributor_count` people.
+/// A distinct, on-curve address for a generated contributor.
+///
+/// On-curve matters: an off-curve address is one nobody can sign for, so a
+/// share sent there could never be claimed. `Config::validate` refuses those,
+/// and a property suite that generated them would be testing a config the
+/// tool rejects.
+fn wallet_for(index: usize) -> String {
+    let mut raw = [0u8; 32];
+    raw[..8].copy_from_slice(&(index as u64).to_le_bytes());
+    // Roughly half of all thirty-two byte values are not curve points, so the
+    // last byte is stepped until one is. It always terminates well before the
+    // range runs out.
+    for nudge in 0..=u8::MAX {
+        raw[31] = nudge;
+        let candidate = crate::chain::wallet::Address::from_pubkey_bytes(raw);
+        if candidate.is_on_curve() {
+            return candidate.to_string();
+        }
+    }
+    unreachable!("some nudge of the last byte lands on the curve")
+}
+
 fn config_with(contributor_count: usize, fees: FeeSchedule) -> Config {
     let mut config = Config::template("proptest");
     config.asset = Asset::native("TEST", "testnet", 6);
     config.fees = fees;
-    config.wallets.treasury = Address::parse("0x2222222222222222222222222222222222222222").unwrap();
+    config.wallets.treasury =
+        Address::parse("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA").unwrap();
     config.wallets.open_collective =
-        Address::parse("0x3333333333333333333333333333333333333333").unwrap();
+        Address::parse("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL").unwrap();
     config.identities = (0..contributor_count)
         .map(|i| {
-            Identity::parse(format!("dev{i}"), &format!("0x{:040x}", i + 1))
+            Identity::parse(format!("dev{i}"), &wallet_for(i))
                 .unwrap()
                 .with_email(format!("dev{i}@example.com"))
         })
@@ -153,7 +176,7 @@ proptest! {
         let mut config = config_with(scores.len(), FeeSchedule::default());
         // Point every identity at the same address.
         for identity in &mut config.identities {
-            identity.wallet = Some(Address::parse("0x000000000000000000000000000000000000c0de").unwrap());
+            identity.wallet = Some(Address::parse("So11111111111111111111111111111111111111112").unwrap());
         }
         let plan = PlanBuilder::new(&config, &attribution_with(&scores), range(), gross)
             .created_at(0).build().unwrap();

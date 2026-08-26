@@ -95,7 +95,7 @@ pub enum Error {
     /// A settlement backend refused to execute the plan.
     #[error("settlement backend `{backend}` rejected the plan: {reason}")]
     Settlement {
-        /// Backend that refused, e.g. `evm`.
+        /// Backend that refused, e.g. `solana`.
         backend: String,
         /// Why it refused.
         reason: String,

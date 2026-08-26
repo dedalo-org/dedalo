@@ -11,20 +11,31 @@
 //! fails, so the scheme is stated here rather than left to be inferred:
 //!
 //! ```text
-//! leaf  = keccak256( keccak256( abi.encode(uint256 index, address account, uint256 amount) ) )
-//! node  = keccak256( min(a, b) ‖ max(a, b) )
+//! leaf  = sha256( sha256( index:u64le ‖ account:[u8;32] ‖ amount:u64le ) )
+//! node  = sha256( min(a, b) ‖ max(a, b) )
 //! ```
 //!
-//! Three choices, each for a reason:
+//! sha256 because it is what Solana hashes with, little-endian because that is
+//! what Borsh and the account model use, and packed rather than word-aligned
+//! because thirty-two byte words are an EVM idea and padding a Solana leaf
+//! would cost the program bytes to reproduce.
+//!
+//! **Amounts are `u64` here, and that is a constraint rather than a choice.**
+//! An SPL token balance is a `u64`, so a round that does not fit one cannot be
+//! settled at all. [`Claim::leaf`] refuses such a claim rather than truncating
+//! it, because a truncated amount is a leaf that verifies against a proof and
+//! pays the wrong number.
+//!
+//! Four choices, each for a reason:
 //!
 //! - **Leaves are hashed twice.** A single hash lets a 64-byte leaf be
 //!   presented as an internal node, which is the classic second-preimage
 //!   attack on Merkle trees. Double hashing makes leaf and node preimages
 //!   different lengths, so no leaf can ever masquerade as a node.
 //! - **Pairs are sorted before hashing.** The proof then needs no direction
-//!   bits, and the verifier is OpenZeppelin's `MerkleProof`, which is the most
-//!   reviewed implementation available. Matching it is worth more than any
-//!   cleverness of ours.
+//!   bits, and the shape matches the sorted-pair verifier that every Merkle
+//!   distributor on Solana uses. Matching the thing reviewers already know how
+//!   to read is worth more than any cleverness of ours.
 //! - **The index is inside the leaf.** Two contributors with equal amounts
 //!   would otherwise produce identical leaves, and one proof would claim both
 //!   shares. The index also pins the plan's item order into the root, which
@@ -43,7 +54,7 @@
 //!
 //! [`docs/settlement-architecture.md`]: https://github.com/dedalo-org/dedalo/blob/main/docs/settlement-architecture.md
 
-use sha3::{Digest, Keccak256};
+use sha2::{Digest, Sha256};
 
 use crate::chain::wallet::Address;
 use crate::error::{Error, Result};
@@ -70,48 +81,62 @@ impl Claim {
     ///
     /// # Errors
     ///
-    /// Returns [`Error::Address`] if the account is not an EVM address.
+    /// Returns [`Error::Address`] if the account is not a Solana address, and
+    /// [`Error::Config`] if the amount does not fit the `u64` an SPL token
+    /// balance is. The second is not a formatting problem: a round that cannot
+    /// be represented cannot be settled, and finding that out here is better
+    /// than finding it out from a program.
     pub fn leaf(&self) -> Result<Hash> {
-        Ok(leaf_of(self.index, self.account.evm_bytes()?, self.amount))
+        let units = self.amount.base_units();
+        let amount = u64::try_from(units).map_err(|_| {
+            Error::config(format!(
+                "{units} base units does not fit a u64, and an SPL token balance is a u64 — \
+                 this round cannot be settled as it stands"
+            ))
+        })?;
+        Ok(leaf_of(self.index, self.account.pubkey_bytes()?, amount))
     }
 }
 
 /// The leaf encoding itself, over the bytes a chain actually holds.
 ///
 /// Separate from [`Claim`] because this is the primitive both halves need and
-/// they hold an address differently. Off chain an address is a checksummed
-/// string, because that is what a plan records and a person reads; on chain it
-/// is twenty bytes, and a contract that carried the string form would spend
-/// gas and code size turning one into the other on every call.
+/// they hold an address differently. Off chain an address is base58, because
+/// that is what a plan records and a person reads; on chain it is thirty-two
+/// bytes, and a program that carried the string form would spend compute and
+/// account space turning one into the other on every call.
 ///
 /// ```text
-/// leaf = keccak256( keccak256( abi.encode(uint256 index, address account, uint256 amount) ) )
+/// leaf = sha256( sha256( index:u64le ‖ account:[u8;32] ‖ amount:u64le ) )
 /// ```
-pub fn leaf_of(index: u64, account: [u8; 20], amount: Amount) -> Hash {
-    // Three 32-byte words. Numbers and addresses are right-aligned, which is
-    // how the ABI encodes every type narrower than a word.
-    let mut encoded = [0u8; 96];
-    encoded[24..32].copy_from_slice(&index.to_be_bytes());
-    encoded[44..64].copy_from_slice(&account);
-    encoded[80..96].copy_from_slice(&amount.base_units().to_be_bytes());
+pub fn leaf_of(index: u64, account: [u8; 32], amount: u64) -> Hash {
+    // Packed, little-endian: 8 + 32 + 8. No padding, because the alignment
+    // rules that made the EVM pad to thirty-two byte words do not exist here
+    // and every byte is one the program has to hash back.
+    let mut encoded = [0u8; 48];
+    encoded[..8].copy_from_slice(&index.to_le_bytes());
+    encoded[8..40].copy_from_slice(&account);
+    encoded[40..48].copy_from_slice(&amount.to_le_bytes());
 
-    let once = keccak(&encoded);
-    keccak(&once)
+    let once = sha256(&encoded);
+    sha256(&once)
 }
 
-fn keccak(bytes: &[u8]) -> Hash {
+fn sha256(bytes: &[u8]) -> Hash {
     let mut out = [0u8; 32];
-    out.copy_from_slice(&Keccak256::digest(bytes));
+    out.copy_from_slice(&Sha256::digest(bytes));
     out
 }
 
-/// `keccak256(min(a, b) ‖ max(a, b))` — OpenZeppelin's `_hashPair`.
+/// `sha256(min(a, b) ‖ max(a, b))` — the sorted-pair node every Solana Merkle
+/// distributor uses, so a proof built here verifies against a reader's
+/// expectations rather than against ours alone.
 fn hash_pair(a: Hash, b: Hash) -> Hash {
     let mut buf = [0u8; 64];
     let (first, second) = if a <= b { (a, b) } else { (b, a) };
     buf[..32].copy_from_slice(&first);
     buf[32..].copy_from_slice(&second);
-    keccak(&buf)
+    sha256(&buf)
 }
 
 /// The tree over one round's claims.
@@ -251,8 +276,7 @@ mod tests {
     use super::*;
 
     fn address(byte: u8) -> Address {
-        let body: String = std::iter::repeat_n(format!("{byte:02x}"), 20).collect();
-        Address::parse(&format!("0x{body}")).unwrap()
+        Address::from_pubkey_bytes([byte; 32])
     }
 
     fn claims(count: u64) -> Vec<Claim> {
@@ -272,17 +296,17 @@ mod tests {
             account: address(0xaa),
             amount: Amount::from_base_units(255),
         };
-        // Three words, rebuilt here rather than read back from the encoder, so
-        // the test asserts the layout instead of agreeing with it.
-        let mut expected_encoding = [0u8; 96];
-        expected_encoding[31] = 1; // index, right-aligned
-        expected_encoding[44..64].copy_from_slice(&[0xaa; 20]); // address, right-aligned
-        expected_encoding[95] = 255; // amount, right-aligned
+        // Rebuilt here rather than read back from the encoder, so the test
+        // asserts the layout instead of agreeing with it. Packed, no padding.
+        let mut expected_encoding = [0u8; 48];
+        expected_encoding[0] = 1; // index, u64 little-endian
+        expected_encoding[8..40].copy_from_slice(&[0xaa; 32]); // account
+        expected_encoding[40] = 255; // amount, u64 little-endian
 
-        let expected = keccak(&keccak(&expected_encoding));
+        let expected = sha256(&sha256(&expected_encoding));
         assert_eq!(claim.leaf().unwrap(), expected);
         assert_eq!(
-            leaf_of(1, [0xaa; 20], Amount::from_base_units(255)),
+            leaf_of(1, [0xaa; 32], 255),
             expected,
             "the primitive and the wrapper must agree"
         );
@@ -402,7 +426,7 @@ mod tests {
             let claims: Vec<Claim> = (0..size)
                 .map(|index| Claim {
                     index,
-                    account: Address::from_evm_bytes([index as u8 + 1; 20]),
+                    account: Address::from_pubkey_bytes([index as u8 + 1; 32]),
                     amount: Amount::from_base_units(u128::from(index) + 1),
                 })
                 .collect();
@@ -430,22 +454,26 @@ mod tests {
 
     /// The leaf encoding, pinned.
     ///
-    /// These values were the cross-check against a second implementation of
-    /// the same encoding, in Solidity. That implementation is gone — the vault
-    /// is Rust now — but the reason to pin them outlived it: the encoding is
-    /// what a deployed contract will verify proofs against, and changing it
-    /// silently would invalidate every round already deposited.
+    /// These values began as the cross-check against a second implementation
+    /// in Solidity. That implementation is gone, and so is the chain it was
+    /// for — but the reason to pin them outlived both: the encoding is what a
+    /// deployed program will verify proofs against, and changing it silently
+    /// would invalidate every round already deposited.
     ///
-    /// A change here is allowed. It has to be deliberate, and the commit has
-    /// to say why.
+    /// **They were last changed deliberately**, when the leaf moved from
+    /// `keccak256(abi.encode(...))` to `sha256` over packed little-endian
+    /// fields, because the chain became Solana. Nothing had been deposited
+    /// anywhere, so nothing was invalidated. That is the only circumstance in
+    /// which this may move: a change here is allowed, it has to be deliberate,
+    /// and the commit has to say why.
     #[test]
     fn the_leaf_encoding_has_not_moved() {
         let claims: Vec<Claim> = [
-            ("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", 1_000u128),
-            ("0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359", 2_500),
-            ("0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB", 400),
-            ("0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb", 100),
-            ("0x9d33df7B2951b0086D40814475869BE3A485a146", 7),
+            ("So11111111111111111111111111111111111111112", 1_000u128),
+            ("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", 2_500),
+            ("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU", 400),
+            ("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL", 100),
+            ("SysvarRent111111111111111111111111111111111", 7),
         ]
         .iter()
         .enumerate()
@@ -459,7 +487,7 @@ mod tests {
         let tree = ClaimTree::new(claims).unwrap();
         assert_eq!(
             tree.root_hex(),
-            "0xffcf57755a292ee72605206f2e2fe131b222cb0ebd45c0844f68a187a384ec72"
+            "0x9900d807d47b7a32f9f4c07be1f02a90dbc0c68d1aa8bfb8944e27d7d445b16b"
         );
         assert_eq!(tree.total().unwrap(), Amount::from_base_units(4_007));
 
@@ -469,7 +497,7 @@ mod tests {
         assert_eq!(short.len(), 1);
         assert_eq!(
             format!("0x{}", hex::encode(short[0])),
-            "0x3c10e56238056db4830e9497627d8c89435b42a0bc7142797badd5ec307a4af2"
+            "0xc6b1add2bcfc4ceaa0b003c378468f5b510353c41f893e4b15642a2d127b8849"
         );
     }
 

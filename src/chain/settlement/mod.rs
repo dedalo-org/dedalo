@@ -5,13 +5,13 @@
 //! [`crate::payout`]; a backend only signs and broadcasts what a plan already
 //! says, after re-verifying it.
 
-pub mod abi;
 pub mod dry_run;
-pub mod evm;
+pub mod instruction;
 pub mod proposal;
+pub mod solana;
 
 pub use dry_run::DryRunSettlement;
-pub use evm::EvmSettlement;
+pub use solana::SolanaSettlement;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -64,9 +64,9 @@ pub trait Settlement: Send + Sync {
 pub fn backend_from_config(config: &SettlementConfig) -> Result<Box<dyn Settlement>> {
     match config.backend.as_str() {
         "dry-run" | "dryrun" | "simulate" => Ok(Box::new(DryRunSettlement::default())),
-        "evm" => Ok(Box::new(EvmSettlement::from_config(config)?)),
+        "solana" => Ok(Box::new(SolanaSettlement::from_config(config)?)),
         other => Err(Error::config(format!(
-            "unknown settlement backend `{other}` (expected `dry-run` or `evm`)"
+            "unknown settlement backend `{other}` (expected `dry-run` or `solana`)"
         ))),
     }
 }

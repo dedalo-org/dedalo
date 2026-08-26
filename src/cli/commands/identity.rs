@@ -66,25 +66,27 @@ fn list(engine: &Engine, json: bool) -> Result<()> {
     Ok(())
 }
 
-/// Below this many bits of EIP-55 checksum, a typo is likely enough to
-/// survive that it is worth saying so out loud.
-///
-/// An EVM address averages fifteen hex letters and therefore fifteen bits.
-/// Twelve is the bottom of the ordinary range: under it, the odds of a slip
-/// parsing anyway pass one in four thousand, which is not a number to hold
-/// someone's payouts on without them knowing.
-const WEAK_CHECKSUM_BITS: u32 = 12;
-
 fn link(engine: &Engine, handle: &str, wallet: &str, emails: &[String], json: bool) -> Result<()> {
     // Validate before writing. The config rejects a bad address on load, so
     // skipping the check here would just move the failure somewhere less
-    // obvious — and the EIP-55 checksum is what catches a mistyped character
-    // before it becomes an irreversible transfer.
+    // obvious — and this is the only moment a human chooses an address.
     let address = Address::parse(wallet).with_context(|| format!("cannot link `{handle}`"))?;
     if address.is_zero() {
         bail!(
             "the zero address is a placeholder, not a destination: \
              anything sent to it is destroyed"
+        );
+    }
+    // A share can only be claimed by whoever can sign for the address it names.
+    // An off-curve address has no keypair, so this would be a contributor who
+    // could never be paid — and `plan.unresolved` would not report it, because
+    // as far as the plan is concerned they have a wallet.
+    if !address.is_on_curve() {
+        bail!(
+            "this is not a wallet: it is off the ed25519 curve, which means it is \
+             program-derived and nobody holds a key for it. A share paid here \
+             could never be claimed. Associated token accounts are off-curve too \
+             — link the wallet, not its token account."
         );
     }
     let wallet = address.as_str();
@@ -131,16 +133,21 @@ fn link(engine: &Engine, handle: &str, wallet: &str, emails: &[String], json: bo
 
     write_document(path, &doc)?;
 
-    // Said once, here, because this is the only moment a human chooses an
-    // address. After this it is just a string the pipeline carries.
+    // Said every time, here, because this is the only moment a human chooses
+    // an address. After this it is just a string the pipeline carries.
+    //
+    // The EVM version fired only below a threshold, because EIP-55 gave a real
+    // and variable number of bits. A Solana address gives none at all, so
+    // there is no threshold and no quiet case: the warning is either always
+    // right or the address layer has changed.
     let bits = address.checksum_bits();
-    if bits < WEAK_CHECKSUM_BITS {
+    if bits == 0 {
         eprintln!(
-            "{} this address carries only {bits} bits of checksum, so roughly \
-             1 in {} single-character typos would still parse. Compare it \
-             against the wallet, character by character, before a round runs.",
+            "{} a Solana address carries no checksum. Every thirty-two byte \
+             value is a valid key, so a mistyped address that still decodes is \
+             accepted and belongs to nobody. Compare it against the wallet, \
+             character by character, before a round runs.",
             ui::yellow("warning:"),
-            1u64 << bits
         );
     }
 

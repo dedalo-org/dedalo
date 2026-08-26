@@ -46,7 +46,7 @@ split_with_co_authors = true
 symbol = "USDC"
 decimals = 6
 chain = "base"
-contract = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+contract = "So11111111111111111111111111111111111111112"
 
 [fees]
 # Taken off the top of every round, in basis points (10000 = 100%).
@@ -59,11 +59,11 @@ treasury_bps = 1500
 
 [wallets]
 # Funds each round is paid out of.
-source = "0x0000000000000000000000000000000000000000"
+source = "So11111111111111111111111111111111111111112"
 # This project's own reserve.
-treasury = "0x0000000000000000000000000000000000000000"
+treasury = "So11111111111111111111111111111111111111112"
 # The network's Open Collective wallet, receiving `fees.protocol_bps`.
-open_collective = "0x0000000000000000000000000000000000000000"
+open_collective = "So11111111111111111111111111111111111111112"
 
 [settlement]
 # `dry-run` computes and verifies a round without spending anything.
@@ -72,14 +72,14 @@ open_collective = "0x0000000000000000000000000000000000000000"
 # people execute them from the project's multisig.
 backend = "dry-run"
 # chain_id = 8453
-# contract = "0x0000000000000000000000000000000000000000"   # claim contract
+# contract = "So11111111111111111111111111111111111111112"   # claim contract
 
 # Contributors and their wallets. Add them with:
 #   dedalo identity link <handle> <wallet> --email <git-email>
 #
 # [[identities]]
 # handle = "ada"
-# wallet = "0x0000000000000000000000000000000000000000"
+# wallet = "So11111111111111111111111111111111111111112"
 # emails = ["ada@example.com"]
 "##;
 

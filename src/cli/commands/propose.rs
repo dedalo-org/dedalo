@@ -1,7 +1,7 @@
 //! `dedalo propose` — what a round asks a human to sign.
 //!
 //! There is no `--execute` here on purpose. Dedalo holds no key and produces
-//! no signature: it prints the exact transactions a multisig must run, with
+//! no signature: it prints the exact instructions a multisig must run, with
 //! the calldata already encoded, so a signer compares them against a plan they
 //! can read rather than trusting a tool they cannot.
 
@@ -53,28 +53,55 @@ pub fn run(engine: &Engine, args: &ProposeArgs, json: bool) -> Result<()> {
 
     let mut table = Table::new(&[
         ("STEP", Align::Right),
-        ("TO", Align::Left),
+        ("PROGRAM", Align::Left),
         ("WHAT", Align::Left),
     ]);
-    for tx in &proposal.transactions {
+    for ix in &proposal.instructions {
         table.push(vec![
-            tx.step.to_string(),
-            ui::truncate(&tx.to, 20),
-            tx.description.clone(),
+            ix.step.to_string(),
+            ui::truncate(&ix.program_id, 20),
+            ix.description.clone(),
         ]);
     }
     print!("{}", table.render());
     println!();
 
-    for tx in &proposal.transactions {
-        println!("{} {}", ui::dim(&format!("calldata {}:", tx.step)), tx.data);
+    // Accounts are printed, not summarised. Which accounts an instruction is
+    // given decides what it does as much as its data does, and a signer who
+    // checks only the data has checked half of it.
+    for ix in &proposal.instructions {
+        println!("{}", ui::dim(&format!("step {} accounts:", ix.step)));
+        for account in &ix.accounts {
+            let flags = match (account.signer, account.writable) {
+                (true, true) => "signer, writable",
+                (true, false) => "signer",
+                (false, true) => "writable",
+                (false, false) => "",
+            };
+            let what = account
+                .address
+                .clone()
+                .or_else(|| account.derivation.clone().map(|d| format!("derived: {d}")))
+                .unwrap_or_else(|| "unknown".into());
+            println!(
+                "  {:<44} {}  {}",
+                what,
+                ui::dim(&account.role),
+                ui::dim(flags)
+            );
+        }
+        println!(
+            "{} {}",
+            ui::dim(&format!("step {} data:", ix.step)),
+            ix.data
+        );
+        println!();
     }
-    println!();
     println!(
         "{}",
         ui::dim(
             "run these in order from the project's multisig. Dedalo signed nothing: \
-             check the calldata against the plan before approving."
+             check the data and the accounts against the plan before approving."
         )
     );
     Ok(())
