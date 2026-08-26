@@ -13,7 +13,7 @@ tracker][issues]. This page is the shape of it.
 - [x] Append-only hash-chained ledger, with idempotent rounds
 - [x] EIP-55 address validation that reports its own strength
 - [x] The vault's rules, as pure Rust with a test per refusal
-- [x] The Stylus deployable, inside the 24 KiB limit
+- [x] The Solana deployable, inside the 24 KiB limit
 - [x] GitHub Action wrapper
 - [x] Exhaustive proofs for the fee schedule, basis points, small weight
       vectors, and every tree shape to 64 claims
@@ -52,7 +52,7 @@ already says: `Error::NotImplemented`.
 contributor, so what matters is the fee as a fraction of the payout, and that
 fraction is what a merge-to-earn tool dies of. Native USDC and one network
 rather than a family of them followed from the same reasoning. The full
-argument, including what it costs — the Stylus vault is discarded, and a Solana
+argument, including what it costs — the Solana vault is discarded, and a Solana
 address carries no checksum where an EVM one carried about fifteen bits — is in
 [the architecture document][arch].
 

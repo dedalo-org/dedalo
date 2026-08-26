@@ -119,8 +119,8 @@ Nothing downstream sees a float. See [Attribution](../concepts/attribution.md).
 [asset]
 symbol = "USDC"
 decimals = 6
-chain = "base"
-contract = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+chain = "devnet"
+contract = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 ```
 
 | Key | Required | Meaning |
@@ -170,7 +170,7 @@ writes the zero address as a placeholder, and settlement refuses to send to it.
 
 > **Careful** — a placeholder is refused. A *wrong real address* is refused by
 > nothing. Confirm each of these out of band before a round moves money, and
-> read [how strong the checksum is](../concepts/identities.md#how-strong-is-the-checksum)
+> read [how strong the checksum is](../concepts/identities.md#there-is-no-checksum)
 > before deciding that a valid address is a correct one.
 
 ## `[settlement]`
@@ -179,7 +179,7 @@ writes the zero address as a placeholder, and settlement refuses to send to it.
 [settlement]
 backend = "dry-run"
 # rpc_url = "https://…"
-# chain_id = 8453
+# cluster = "devnet"
 # contract = "0x…"
 ```
 
@@ -187,7 +187,7 @@ backend = "dry-run"
 | --- | --- | --- |
 | `backend` | `"dry-run"` | `dry-run` computes and verifies without spending. `evm` validates and builds the call, then refuses to sign. |
 | `rpc_url` | — | JSON-RPC endpoint of the chain. |
-| `chain_id` | — | EIP-155 chain id, checked against the endpoint. |
+| `cluster` | — | EIP-155 chain id, checked against the endpoint. |
 | `contract` | — | Claim contract a round is deposited into. |
 
 There is **no key here, and there must never be one.** `settlement.signer_env`,
@@ -245,17 +245,17 @@ split_with_co_authors = true
 [asset]
 symbol = "USDC"
 decimals = 6
-chain = "base"
-contract = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+chain = "devnet"
+contract = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 
 [fees]
 protocol_bps = 250
 treasury_bps = 1500
 
 [wallets]
-source = "0x1111111111111111111111111111111111111111"
-treasury = "0x2222222222222222222222222222222222222222"
-open_collective = "0x3333333333333333333333333333333333333333"
+source = "So11111111111111111111111111111111111111112"
+treasury = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+open_collective = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
 
 [settlement]
 backend = "dry-run"

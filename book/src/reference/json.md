@@ -163,7 +163,7 @@ The serialised `RoundProposal`:
   "plan_id": "ded106bd7281…",
   "merkle_root": "0x…",
   "claim_contract": "0x…",
-  "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "token": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
   "total": "825000000",
   "claims": 3,
   "transactions": [
@@ -188,7 +188,7 @@ exactly. `transactions` is ordered: a deposit before its approval reverts.
 ```
 
 `checksum_bits` is how much EIP-55 validation is worth for that address — see
-[How strong is the checksum](../concepts/identities.md#how-strong-is-the-checksum).
+[How strong is the checksum](../concepts/identities.md#there-is-no-checksum).
 
 `identity remove` returns `{ "removed": "ada" }`.
 

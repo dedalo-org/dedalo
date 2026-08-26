@@ -105,7 +105,7 @@ process. The contract is narrow on purpose: a settlement re-verifies the plan
 before acting, and returns a receipt or an error.
 
 > **Careful** — if you implement this, do not return a receipt for something
-> that did not happen. The shipped `evm` backend returns `NotImplemented`
+> that did not happen. The shipped `solana` backend returns `NotImplemented`
 > rather than a plausible-looking success, and that is the standard to hold.
 
 ## Testing against real repositories

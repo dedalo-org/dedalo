@@ -54,11 +54,15 @@ person who published it. Recompute, compare one string.
 ### 5. One wallet, one transfer
 
 A contributor with several emails is merged into a single item before a plan is
-finalised. Addresses compare case-insensitively.
+finalised. Addresses compare **exactly**.
 
-*Why:* EIP-55 means one account has two valid spellings. A case-sensitive
-comparison would make them two payees — which is both a double payment and a
-payout table that lies about how many people there are.
+*Why:* base58 has one encoding per value, so an account has one written form and
+two different strings are two different accounts. Folding case — which the
+previous chain family required, because EIP-55 put a checksum in the
+capitalisation — would merge two unrelated accounts into one payee here. Both
+directions are the same invariant: the number of payees in a plan must be the
+number of accounts, and a payout table that lies about how many people there
+are is a payout table that pays the wrong ones.
 
 → [One wallet, one transfer](../concepts/identities.md#one-wallet-one-transfer)
 

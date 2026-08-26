@@ -253,8 +253,8 @@ split_with_co_authors = true
 [asset]
 symbol = "USDC"
 decimals = 6
-chain = "base"
-contract = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+chain = "devnet"
+contract = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 
 [fees]
 protocol_bps = 250           # 2.5% → the network's Open Collective
@@ -268,7 +268,7 @@ open_collective = "0x…"
 
 [settlement]
 backend = "dry-run"          # or "evm"
-chain_id = 8453
+cluster = "devnet"
 contract = "0x…"             # the claim contract a round is deposited into
 
 [[identities]]
@@ -309,7 +309,7 @@ The vault is Rust. The rules live in [`src/chain/vault`](src/chain/vault),
 where they are pure — no storage, no clock, no caller — and therefore testable
 over their whole domain rather than by deploying them somewhere and poking
 them. The deployable at [`src/chain/contract`](src/chain/contract) is an
-[Arbitrum Stylus](https://arbitrum.io/stylus) crate that compiles to
+[Solana](https://arbitrum.io/stylus) crate that compiles to
 WebAssembly, and is deliberately thin: reading storage, moving a token, and
 knowing the time. A reader checking whether it is correct should end up in
 `vault`.
@@ -415,7 +415,7 @@ one chain.
 
 Early. The pipeline from git history to a verified, reproducible payout plan
 is implemented and tested end to end. **On-chain broadcasting is not live
-yet**: the `evm` backend validates the configuration and builds the exact
+yet**: the `solana` backend validates the configuration and builds the exact
 distributor call a plan translates into, then stops before signing — shipping
 an unaudited signing path would put real funds at risk. Use the default
 `dry-run` backend, which produces identical numbers minus the broadcast.

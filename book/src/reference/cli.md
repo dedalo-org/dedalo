@@ -94,7 +94,7 @@ Plus the [range options](#range-options). `--plan` and `--amount` conflict.
 
 `--execute` does not broadcast today: no backend can sign, because
 [Dedalo holds no signing key](../concepts/settlement.md#dedalo-holds-no-signing-key).
-The `evm` backend builds the exact call and returns `NotImplemented`.
+The `solana` backend builds the exact call and returns `NotImplemented`.
 
 `--allow-undistributed` is only meaningful when *nobody* in the round has a
 wallet on file, which normally means an `identity link` is missing rather than
@@ -157,7 +157,7 @@ Map one or more git emails to a wallet.
 | `--email <EMAIL>` | Git author email to attach. **Repeatable, and required.** |
 
 Validates the address and reports how many bits of EIP-55 checksum protect it —
-see [How strong is the checksum](../concepts/identities.md#how-strong-is-the-checksum).
+see [How strong is the checksum](../concepts/identities.md#there-is-no-checksum).
 
 ### `identity remove <HANDLE>`
 
