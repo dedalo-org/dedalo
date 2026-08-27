@@ -126,13 +126,33 @@ An array of `MergeEvent`, oldest first:
   "project": "my-project",
   "branch": "main",
   "asset": { "symbol": "USDC", "decimals": 6, "chain": "base", "contract": "0x8335…" },
-  "pending_merges": 4,
+  "lands_as": "commits",
+  "pending_changes": 4,
   "pending_contributors": 3,
   "fees": { "protocol_bps": 250, "treasury_bps": 1500, "contributor_bps": 8250 },
   "settlement_backend": "dry-run",
-  "state": { }
+  "identities": 2,
+  "state": {
+    "last_settled_commit": "af3141b5…",
+    "last_settled_plan": "ded106bd7281…",
+    "last_settled_at": 1756300000,
+    "lifetime_paid": "1000000",
+    "lifetime_protocol_fees": "25000"
+  }
 }
 ```
+
+`state` is `null` until a round has been settled, and every field inside it is
+`null` until then too — a project that has never paid anybody says so rather
+than reporting zeroes that look like a settled round of nothing.
+
+`pending_changes` was `pending_merges` before `[git] lands_as` existed. It
+counts changes that landed, which on a squash-merge repository is not a merge
+commit at all.
+
+`contributor_bps` is derived — it is whatever the other two shares leave — and
+is emitted anyway. A consumer that computed it would be a second
+implementation of the one subtraction that decides how much contributors get.
 
 ## `dedalo verify --json`
 
