@@ -44,6 +44,7 @@
 pub mod attribution;
 pub mod chain;
 pub mod git;
+pub mod lifecycle;
 pub mod money;
 pub mod payout;
 pub mod storage;
