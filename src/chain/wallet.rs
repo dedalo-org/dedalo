@@ -536,6 +536,76 @@ mod tests {
         assert!(Address::parse("1111111111111111111111111111111111111111111111").is_err());
     }
 
+    /// What ed25519 says is a point, pinned.
+    ///
+    /// `is_on_curve` is one call into `curve25519-dalek`, and it decides
+    /// whether an address is a wallet somebody can sign for or a
+    /// program-derived address nobody can. `identity link` **refuses** the
+    /// second, so a library that moved that boundary would silently change who
+    /// can be paid — and every property test here would still pass, because
+    /// none of them assert *which* byte patterns are points.
+    ///
+    /// This is the same idea as
+    /// [`chain::merkle::the_leaf_encoding_has_not_moved`](crate::chain::merkle):
+    /// a fixture that fails when a dependency changes its mind. A change here
+    /// is allowed. It has to be deliberate, and the commit has to say why.
+    ///
+    /// Two of these are worth reading twice:
+    ///
+    /// - **`ComputeBudget111…` is off the curve.** A real, deployed Solana
+    ///   program whose address is not a public key — which is what makes the
+    ///   distinction concrete rather than theoretical.
+    /// - **Non-canonical encodings are accepted.** A `y` coordinate at or
+    ///   above the field prime is reduced rather than rejected, so two
+    ///   different byte strings can name the same point. That is documented
+    ///   `curve25519-dalek` behaviour and not a defect here, but it is exactly
+    ///   the kind of thing a major version could tighten, and if it ever does
+    ///   this test is what will say so.
+    #[test]
+    fn the_curve_has_not_moved() {
+        // Named addresses, with what the curve says about each.
+        const KNOWN: [(&str, bool); 7] = [
+            // All thirty-two zero bytes. The System Program, and a point.
+            ("11111111111111111111111111111111", true),
+            ("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", true),
+            ("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL", true),
+            ("So11111111111111111111111111111111111111112", true),
+            ("SysvarRent111111111111111111111111111111111", true),
+            // A real program that is *not* a curve point.
+            ("ComputeBudget111111111111111111111111111111", false),
+            ("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU", true),
+        ];
+        for (address, on_curve) in KNOWN {
+            let parsed = Address::parse(address).unwrap();
+            assert_eq!(
+                parsed.is_on_curve(),
+                on_curve,
+                "{address} changed which side of the curve it is on"
+            );
+        }
+
+        // Byte patterns rather than addresses, for the edges an address book
+        // does not contain.
+        let mut sign_bit = [0u8; 32];
+        sign_bit[31] = 0x80; // the compressed sign of x, and nothing else
+        assert!(Address::from_pubkey_bytes(sign_bit).is_on_curve());
+
+        // y = p and y = p + 1, where p is 2^255 - 19. Both are above the field
+        // prime and both are reduced rather than refused.
+        let mut y_is_p = [0xffu8; 32];
+        y_is_p[0] = 0xed;
+        y_is_p[31] = 0x7f;
+        assert!(
+            Address::from_pubkey_bytes(y_is_p).is_on_curve(),
+            "a non-canonical y is reduced, not rejected — if this fails, the \
+             library has tightened and addresses that parse today may not"
+        );
+
+        let mut all_ones = [0xffu8; 32];
+        all_ones[0] = 0xff;
+        assert!(Address::from_pubkey_bytes(all_ones).is_on_curve());
+    }
+
     #[test]
     fn parsing_never_panics_on_anything_shaped_like_an_address() {
         for value in [

@@ -99,6 +99,7 @@ harnesses = [
   "adversarial::the_crate_and_an_independent_decoder_read_the_same_bytes",
   "adversarial::two_accounts_differing_only_in_case_are_not_merged",
   "adversarial::address_parsing_never_panics",
+  "chain::wallet::the_curve_has_not_moved",
 ]
 notes = """
 No arithmetic, but it decides *where* money lands, so it may not be exempt. \
@@ -109,7 +110,13 @@ thirty-two bytes, and that both read the same bytes out of it.
 There is no checksum to verify against, and that is the finding rather than a \
 gap in the method: `most_single_character_slips_produce_another_valid_address` \
 measures how many typos survive and asserts the number is bad, so \"addresses \
-are validated\" cannot be read as more than it is."""
+are validated\" cannot be read as more than it is.
+
+What the properties cannot say is *which* byte patterns are curve points, and \
+that decides whether an address is a wallet or something nobody can sign for. \
+`the_curve_has_not_moved` pins it against a fixture, so a dependency cannot \
+redefine it quietly — including the case where a non-canonical encoding stops \
+being accepted."""
 
 [modules."storage/ledger"]
 method = "property"
