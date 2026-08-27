@@ -20,15 +20,33 @@ Both crates in the workspace share one version and one tag.
 - **core**: content-addressed payout plans, an append-only ledger, and refusal
   to settle the same plan twice.
 - **cli**: `dedalo init`, `scan`, `contributors`, `plan`, `settle`, `status`,
-  `identity` and `ledger`, each with `--json`.
+  `identity`, `propose` and `ledger`, each with `--json`.
+- **git**: `[git] lands_as` decides what counts as a landed change — a merge
+  commit, or every commit on the branch's first-parent line. A squash-merge
+  repository produces no merge commits at all, so the previous behaviour paid
+  for nothing on the default setting of most projects.
+- **chain**: the chain is Solana. Addresses are base58 over thirty-two bytes,
+  Merkle leaves are `sha256` over packed little-endian fields, and instruction
+  data is Borsh. `dedalo propose` prints the accounts an instruction takes as
+  well as its data.
+- **money**: the rules a funded project follows over time — a ladder of funding
+  thresholds, a four-way split of token revenue, and a periodic distribution by
+  role. Pure arithmetic, wired to no chain.
 - **infrastructure**: one toolchain pinned in `rust-toolchain.toml` for
   contributors and CI, with the declared MSRV verified rather than asserted.
+  Publishing uses crates.io Trusted Publishing, so there is no registry token
+  in this repository's secrets.
 
 ### Known limitations
 
-- On-chain broadcasting is not live. The `evm` backend validates its
-  configuration, re-verifies the plan and builds the distributor call, then
-  returns `NotImplemented` rather than signing through an unaudited path.
+- On-chain broadcasting is not live, and the claim program is **not written**.
+  `chain::vault` holds every rule such a program must enforce, and the `solana`
+  backend re-verifies a plan and then returns `NotImplemented` rather than
+  signing through a path nobody has audited.
+- **A Solana address carries no checksum.** Every thirty-two byte value is a
+  valid key, so a mistyped address that still decodes is accepted.
+  `identity link` says so every time, and refuses an address that is off the
+  ed25519 curve — one nobody could ever sign for.
 
 ## 0.0.0 — 2026-08-25
 
