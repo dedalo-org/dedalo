@@ -192,6 +192,47 @@ method = "tests"
 arithmetic_sites = 0
 notes = "Parses the address a user types, and warns on a weak checksum."
 
+[modules.lifecycle]
+method = "property"
+arithmetic_sites = 10
+harnesses = [
+  "lifecycle::proofs::every_valid_schedule_conserves_the_revenue",
+  "lifecycle::proofs::no_slice_ever_rounds_up_against_contributors",
+  "lifecycle::proofs::a_schedule_that_pays_contributors_nothing_never_splits",
+  "lifecycle::proofs::raising_more_never_lowers_the_stage",
+  "lifecycle::proofs::every_basis_point_value_of_one_slice_conserves_the_revenue",
+  "lifecycle::proofs::every_ladder_shape_reports_a_stage_that_matches_its_thresholds",
+]
+notes = """
+The four-way revenue split and the stage ladder. Sampled rather than proved: a \
+schedule is three basis-point values, so the space of whole schedules is 10^12 \
+and enumerating it is not worth the hour. Two things *are* enumerated — every \
+basis-point value a single slice can take, and every shape a two-rung ladder \
+can express — and each says out loud which domain it does not cover.
+
+The ladder's monotonicity is the property worth reading: raising more never \
+lowers the stage, which is what makes tokenisation irreversible by arithmetic \
+rather than by promise."""
+
+[modules."lifecycle/roles"]
+method = "property"
+arithmetic_sites = 3
+harnesses = [
+  "lifecycle::proofs::every_role_distribution_conserves_the_pool",
+  "lifecycle::proofs::a_wallet_in_many_roles_is_paid_once",
+]
+notes = """
+Decides where the roles slice goes, so it may not be exempt even though the \
+division itself is `Amount::split_by_weights`. What it adds on top is the \
+merge: a wallet holding several roles is one payee carrying the sum, which is \
+`payout`'s invariant 5 on a different set and is the defect this module would \
+otherwise reintroduce."""
+
+[modules."lifecycle/proofs"]
+method = "proofs"
+arithmetic_sites = 26
+notes = "The property and exhaustive suites for the ladder, the split and the roles."
+
 # --------------------------------------------------------------- proofs ---
 
 [modules."money/proofs"]
