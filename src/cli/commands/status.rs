@@ -2,10 +2,76 @@
 
 use crate::Engine;
 use anyhow::Result;
-use serde_json::json;
 
 use crate::cli::commands::display_path;
 use crate::cli::ui;
+use crate::money::Asset;
+use crate::money::treasury::FeeSchedule;
+use crate::storage::ledger::State;
+use serde::Serialize;
+
+/// What `dedalo status --json` emits.
+///
+/// A type rather than a `serde_json::json!` literal, and the difference is not
+/// tidiness. `action.yml` parses this and [RELEASING.md] makes renaming a field
+/// a breaking change — so the shape is a contract, and a contract assembled
+/// from a macro is one nobody can read without running it. Every field below
+/// is documented, `tests/cli.rs` pins the ones the Action reads, and the
+/// handbook's `--json` reference is written from this rather than from memory.
+///
+/// Terminal output is not API and this is: the two travel together and only
+/// one of them may change freely.
+///
+/// [RELEASING.md]: https://github.com/dedalo-org/dedalo/blob/main/RELEASING.md
+#[derive(Debug, Clone, Serialize)]
+pub struct StatusReport<'a> {
+    /// Project name, from `[project] name`.
+    pub project: &'a str,
+    /// Branch whose landed changes earn a payout.
+    pub branch: &'a str,
+    /// The token contributors are paid in.
+    pub asset: &'a Asset,
+    /// How a landed change is recognised on this branch.
+    pub lands_as: crate::git::LandsAs,
+    /// Changes that have landed since the last settled round.
+    pub pending_changes: usize,
+    /// How many distinct contributors those changes are attributed to.
+    pub pending_contributors: usize,
+    /// The cut taken before contributors are paid.
+    pub fees: FeeReport,
+    /// Backend a round would settle through.
+    pub settlement_backend: &'a str,
+    /// How many identities the config maps.
+    pub identities: usize,
+    /// What the ledger records, or `None` where there is no ledger yet.
+    pub state: &'a State,
+}
+
+/// The fee schedule, with the contributor share spelled out.
+///
+/// `contributor_bps` is derived rather than configured — it is whatever the
+/// other two leave. Emitted anyway, because a consumer that computed it would
+/// be a second implementation of the one subtraction that decides how much
+/// contributors get.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct FeeReport {
+    /// Share routed to the network.
+    pub protocol_bps: u16,
+    /// Share retained by the project.
+    pub treasury_bps: u16,
+    /// What is left for contributors.
+    pub contributor_bps: u16,
+}
+
+impl From<&FeeSchedule> for FeeReport {
+    fn from(fees: &FeeSchedule) -> Self {
+        Self {
+            protocol_bps: fees.protocol_bps,
+            treasury_bps: fees.treasury_bps,
+            contributor_bps: fees.contributor_bps(),
+        }
+    }
+}
 
 pub fn run(engine: &Engine, json: bool) -> Result<()> {
     let config = engine.config();
@@ -15,20 +81,18 @@ pub fn run(engine: &Engine, json: bool) -> Result<()> {
     let asset = &config.asset;
 
     if json {
-        return crate::cli::commands::print_json(&json!({
-            "project": config.project.name,
-            "branch": config.git.branch,
-            "asset": asset,
-            "pending_merges": merges.len(),
-            "pending_contributors": attribution.contributions.len(),
-            "fees": {
-                "protocol_bps": config.fees.protocol_bps,
-                "treasury_bps": config.fees.treasury_bps,
-                "contributor_bps": config.fees.contributor_bps(),
-            },
-            "settlement_backend": config.settlement.backend,
-            "state": state,
-        }));
+        return crate::cli::commands::print_json(&StatusReport {
+            project: &config.project.name,
+            branch: &config.git.branch,
+            asset,
+            lands_as: config.git.lands_as,
+            pending_changes: merges.len(),
+            pending_contributors: attribution.contributions.len(),
+            fees: FeeReport::from(&config.fees),
+            settlement_backend: &config.settlement.backend,
+            identities: config.identities.len(),
+            state: &state,
+        });
     }
 
     println!(

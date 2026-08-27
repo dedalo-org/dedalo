@@ -226,6 +226,34 @@ fn settle_simulates_by_default_and_leaves_the_cursor_alone() {
     let status = json_of(repo.path(), &["status"]);
     assert!(status["state"]["last_settled_commit"].is_null());
     assert_eq!(status["state"]["lifetime_paid"], "0");
+    // Every field of the report, pinned. `--json` is a contract and a
+    // contract nothing asserts is a promise: this test is what turns a rename
+    // into a failure here rather than a surprise downstream.
+    for field in [
+        "project",
+        "branch",
+        "asset",
+        "lands_as",
+        "pending_changes",
+        "pending_contributors",
+        "fees",
+        "settlement_backend",
+        "identities",
+        "state",
+    ] {
+        assert!(
+            !status[field].is_null(),
+            "status --json lost the `{field}` field"
+        );
+    }
+    // The three shares are emitted rather than left to be computed, and they
+    // are exhaustive: a consumer that derived the contributor share would be
+    // a second implementation of the subtraction that decides what people get.
+    let fees = &status["fees"];
+    let sum = fees["protocol_bps"].as_u64().unwrap()
+        + fees["treasury_bps"].as_u64().unwrap()
+        + fees["contributor_bps"].as_u64().unwrap();
+    assert_eq!(sum, 10_000, "the three shares must be the whole round");
     // The simulation is still recorded: a dry run is history too.
     let ledger = json_of(repo.path(), &["ledger"]);
     assert!(!ledger.as_array().unwrap().is_empty());
