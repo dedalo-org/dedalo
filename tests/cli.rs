@@ -688,3 +688,58 @@ fn settling_through_solana_explains_that_dedalo_holds_no_key() {
         .stderr(contains("holds no signing key"))
         .stderr(contains("dedalo propose"));
 }
+
+/// Completions and the man page must work with no repository anywhere near.
+///
+/// Every other command opens an engine first, which needs a `dedalo.toml`.
+/// Somebody setting up their shell has not necessarily cloned anything yet, so
+/// these two run before that lookup — and this test is what says so, by
+/// running them from a directory that is not a project.
+#[test]
+fn completions_and_the_man_page_need_no_project() {
+    let empty = tempfile::tempdir().unwrap();
+
+    for (shell, marker) in [
+        ("bash", "_dedalo()"),
+        ("zsh", "#compdef dedalo"),
+        ("fish", "complete -c dedalo"),
+        ("powershell", "Register-ArgumentCompleter"),
+        ("elvish", "edit:completion"),
+    ] {
+        Command::cargo_bin("dedalo")
+            .unwrap()
+            .current_dir(empty.path())
+            .args(["completions", shell])
+            .assert()
+            .success()
+            .stdout(contains(marker))
+            // The flags that decide what happens to money are the reason this
+            // is worth shipping at all.
+            .stdout(contains("--execute"));
+    }
+
+    Command::cargo_bin("dedalo")
+        .unwrap()
+        .current_dir(empty.path())
+        .arg("man")
+        .assert()
+        .success()
+        .stdout(contains(".TH dedalo 1"))
+        .stdout(contains("propose"));
+}
+
+/// Both are hidden from the command list, and `--help` says so at the bottom.
+///
+/// Hidden and undiscoverable are different things. If the hint ever falls out
+/// of `--help`, the only way anybody learns these exist is by reading the
+/// source.
+#[test]
+fn help_hides_the_generators_but_still_names_them() {
+    Command::cargo_bin("dedalo")
+        .unwrap()
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(contains("dedalo completions <bash|zsh|fish|powershell|elvish>"))
+        .stdout(contains("dedalo man"));
+}

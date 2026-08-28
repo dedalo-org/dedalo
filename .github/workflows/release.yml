@@ -135,11 +135,29 @@ jobs:
           name="dedalo-${TAG}-${TARGET}"
           mkdir -p "dist/$name"
           if [ -f "target/${TARGET}/release/dedalo.exe" ]; then
-            cp "target/${TARGET}/release/dedalo.exe" "dist/$name/"
+            bin="target/${TARGET}/release/dedalo.exe"
           else
-            cp "target/${TARGET}/release/dedalo" "dist/$name/"
+            bin="target/${TARGET}/release/dedalo"
           fi
+          cp "$bin" "dist/$name/"
           cp README.md LICENSE CHANGELOG.md "dist/$name/"
+
+          # Completions and the man page come out of the binary being shipped,
+          # not out of a separately built one. Every target in the matrix runs
+          # on a runner of its own architecture, so this is the artifact
+          # describing itself rather than a host build describing it.
+          mkdir -p "dist/$name/completions" "dist/$name/man/man1"
+          for shell in bash zsh fish powershell elvish; do
+            case "$shell" in
+              bash) out="dedalo.bash" ;;
+              zsh) out="_dedalo" ;;
+              fish) out="dedalo.fish" ;;
+              powershell) out="_dedalo.ps1" ;;
+              elvish) out="dedalo.elv" ;;
+            esac
+            "$bin" completions "$shell" > "dist/$name/completions/$out"
+          done
+          "$bin" man > "dist/$name/man/man1/dedalo.1"
           cd dist
           case "$TARGET" in
             *windows*) 7z a "$name.zip" "$name" > /dev/null ;;

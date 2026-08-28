@@ -75,6 +75,14 @@ pub async fn run(cli: &Cli) -> Result<()> {
         return commands::init::run(args, cli.repo.as_ref(), cli.json);
     }
 
+    // Neither of these reads a repository, so neither may require one: a user
+    // setting up completions has not necessarily cloned anything yet.
+    match &cli.command {
+        Command::Completions(args) => return commands::generate::completions(args),
+        Command::Man => return commands::generate::man(),
+        _ => {}
+    }
+
     let engine = commands::engine(cli.repo.as_ref())?;
     match &cli.command {
         Command::Init(_) => unreachable!("handled above"),
@@ -87,6 +95,7 @@ pub async fn run(cli: &Cli) -> Result<()> {
         Command::Ledger(args) => commands::ledger::run(&engine, args, cli.json),
         Command::Verify => commands::verify::run(&engine, cli.json),
         Command::Propose(args) => commands::propose::run(&engine, args, cli.json),
+        Command::Completions(_) | Command::Man => unreachable!("handled above"),
     }
 }
 

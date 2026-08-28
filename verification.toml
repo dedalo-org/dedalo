@@ -313,6 +313,17 @@ method = "exempt"
 arithmetic_sites = 0
 reason = "Shared helpers: opening the engine, printing JSON, display paths."
 
+[modules."cli/commands/generate"]
+method = "tests"
+arithmetic_sites = 0
+notes = """
+Completion scripts and the man page, both derived from the same `Cli` derive \
+that parses arguments. Marked `tests` rather than `exempt` because a \
+completion list that has drifted from the parser is confidently wrong about \
+flags that decide what happens to money — so the tests assert that every \
+shell generates, and that `--execute`, `--allow-undistributed`, `--since` and \
+`--amount` are all in the generated script."""
+
 [modules."cli/commands/init"]
 method = "exempt"
 arithmetic_sites = 0

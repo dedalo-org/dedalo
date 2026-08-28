@@ -4,6 +4,18 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 
+/// Printed at the bottom of `--help`.
+///
+/// Completions are not installed by anything — not by `cargo install`, and not
+/// by `install.sh`, which prints this command rather than editing somebody's
+/// shell configuration behind their back. So the only way a user finds out
+/// they exist is if `--help` says so.
+const COMPLETION_HINT: &str = "\
+Shell completions:  dedalo completions <bash|zsh|fish|powershell|elvish>
+Manual page:        dedalo man > dedalo.1
+
+Handbook: https://dedalo-org.github.io/dedalo/";
+
 #[derive(Debug, Parser)]
 #[command(
     name = "dedalo",
@@ -11,7 +23,9 @@ use clap::{Args, Parser, Subcommand};
     about = "Turn code merges into sustainable open-source funding",
     long_about = "Dedalo reads merge history from git, scores contributions, and \
                   distributes a funding round to contributor wallets — taking a \
-                  protocol fee that flows to the network's Open Collective."
+                  protocol fee that flows to the network's Open Collective.",
+    after_help = COMPLETION_HINT,
+    after_long_help = COMPLETION_HINT
 )]
 /// One parsed `dedalo` invocation: the global options, plus the command.
 ///
@@ -72,6 +86,31 @@ pub enum Command {
     /// Emit the transactions a multisig must run to fund a round. Dedalo
     /// signs nothing and holds no key.
     Propose(ProposeArgs),
+
+    /// Print a completion script for one shell, on stdout.
+    ///
+    /// Hidden because it is a setup step rather than something anybody runs
+    /// twice, and a command list is easier to read without it. `--help`
+    /// mentions it at the bottom, which is where somebody looking for it
+    /// looks.
+    #[command(hide = true)]
+    Completions(CompletionsArgs),
+
+    /// Print the manual page in roff, on stdout.
+    ///
+    /// Hidden for the same reason as `completions`. Writing to stdout rather
+    /// than to a directory keeps it usable by a packager, by the release
+    /// workflow, and by somebody who just wants `dedalo man | man -l -`.
+    #[command(hide = true)]
+    Man,
+}
+
+/// Arguments for `dedalo completions`.
+#[derive(Debug, Args)]
+pub struct CompletionsArgs {
+    /// Shell to generate a completion script for.
+    #[arg(value_enum)]
+    pub shell: clap_complete::Shell,
 }
 
 /// Arguments for `dedalo propose`.

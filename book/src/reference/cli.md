@@ -170,3 +170,48 @@ Show contributors in history that have no wallet yet. Takes the
 [range options](#range-options).
 
 Run this before every round.
+
+## `dedalo completions <SHELL>`
+
+Print a completion script for `bash`, `zsh`, `fish`, `powershell` or `elvish`
+on stdout.
+
+Hidden from the command list, because it is a setup step rather than something
+anybody runs twice — `--help` names it at the bottom, which is where somebody
+looking for it looks.
+
+```console
+$ mkdir -p ~/.local/share/bash-completion/completions
+$ dedalo completions bash > ~/.local/share/bash-completion/completions/dedalo
+```
+
+| Shell | Where it usually goes |
+| --- | --- |
+| bash | `~/.local/share/bash-completion/completions/dedalo` |
+| zsh | a directory on `$fpath`, as `_dedalo` |
+| fish | `~/.config/fish/completions/dedalo.fish` |
+| powershell | appended to `$PROFILE` |
+| elvish | sourced from `~/.config/elvish/rc.elv` |
+
+**Nothing installs these for you.** `cargo install` does not, and `install.sh`
+prints the command rather than writing into your shell's configuration — a
+script you piped to `sh` editing your dotfiles unasked is a bad habit for
+everyone involved. The release archives ship a generated copy under
+`completions/` for packagers.
+
+The script is generated from the same argument definitions that parse the
+command line, so it cannot list a flag that does not exist. That matters more
+here than usual: several flags change what happens to money — `--execute`,
+`--allow-undistributed`, `--since` — and getting one wrong from a typo is
+exactly what completion prevents.
+
+## `dedalo man`
+
+Print the manual page, in roff, on stdout. Also hidden.
+
+```console
+$ dedalo man > /usr/local/share/man/man1/dedalo.1
+$ dedalo man | man -l -          # read it without installing it
+```
+
+Release archives ship it at `man/man1/dedalo.1`.

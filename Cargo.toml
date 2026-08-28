@@ -40,7 +40,16 @@ default = ["cli"]
 # The command-line interface, and the runtime and argument parsing it needs.
 # A library consumer turns this off — `default-features = false` — and pulls
 # in none of it.
-cli = ["dep:anyhow", "dep:clap", "dep:toml_edit", "dep:tokio", "dep:tracing-subscriber", "dep:libc"]
+cli = [
+  "dep:anyhow",
+  "dep:clap",
+  "dep:clap_complete",
+  "dep:clap_mangen",
+  "dep:toml_edit",
+  "dep:tokio",
+  "dep:tracing-subscriber",
+  "dep:libc",
+]
 
 # Exposes `dedalo::testing`, a harness for building throwaway repositories
 # with real merge history. Off by default so it never ships in a normal build.
@@ -75,6 +84,13 @@ tracing = "0.1"
 # The CLI, behind the `cli` feature.
 anyhow = { version = "1", optional = true }
 clap = { version = "4", features = ["derive", "env"], optional = true }
+# Completions and the man page are generated from the same `Cli` derive that
+# parses arguments, so they cannot describe a flag that does not exist. Both
+# are behind hidden subcommands rather than a build script: that works for
+# somebody who installed a prebuilt binary, and it is one less thing the
+# release workflow has to keep in step.
+clap_complete = { version = "4", optional = true }
+clap_mangen = { version = "0.3", optional = true }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"], optional = true }
 toml_edit = { version = "0.23", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }

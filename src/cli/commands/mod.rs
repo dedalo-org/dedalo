@@ -1,3 +1,4 @@
+pub mod generate;
 pub mod identity;
 pub mod init;
 pub mod ledger;
