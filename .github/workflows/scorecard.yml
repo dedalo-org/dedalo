@@ -1,0 +1,72 @@
+name: Scorecard
+
+# Dedalo asks projects to run it in CI, where it reads their history and prints
+# transactions that move their money. The reasonable response to that ask is
+# "why should I trust your supply chain", and a list of good practices in a
+# README is a claim rather than evidence.
+#
+# OpenSSF Scorecard turns most of that list into a number somebody else
+# computed: pinned action SHAs, branch protection, a security policy,
+# dependency updates, signed releases, no binary artifacts in the tree, CI
+# tests, and token permissions on workflows.
+#
+# It says nothing about whether the arithmetic is right. That is what
+# verification.toml and the exhaustive proofs speak to, and the README keeps
+# this badge next to CI rather than next to the money claims for exactly that
+# reason.
+
+on:
+  # Weekly, because most of what it measures changes without this repository
+  # changing: a dependency stops being maintained, an action's tag moves.
+  schedule:
+    - cron: "0 7 * * 1"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    timeout-minutes: 20
+    name: analyse
+    runs-on: ubuntu-latest
+    permissions:
+      # Upload the result to the code-scanning dashboard, so a finding is a
+      # thing with a location rather than a number on a badge.
+      security-events: write
+      # Publish the result to the public OpenSSF API, which is what lets the
+      # badge and deps.dev read it. Nothing is signed with it that this
+      # repository controls.
+      id-token: write
+      contents: read
+      # Scorecard reads workflow run history to check that CI actually runs.
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # Publishes to the OpenSSF API so the badge in README.md resolves.
+          # It publishes the score and the check results, which are computed
+          # from this repository's public metadata and nothing else.
+          publish_results: true
+
+      # Kept for the retention window so a score that moved can be compared
+      # against the run that moved it. SARIF in the dashboard shows what is
+      # wrong now; this shows what was wrong last week.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scorecard-results
+          path: results.sarif
+          retention-days: 30
+
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@486fec2a3ea2626afcd8c7e9208b4f515078dd7e # codeql-bundle-v2.26.4
+        with:
+          sarif_file: results.sarif

@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/dedalo-org/dedalo/actions/workflows/ci.yml/badge.svg)](https://github.com/dedalo-org/dedalo/actions/workflows/ci.yml)
 [![Security](https://github.com/dedalo-org/dedalo/actions/workflows/security.yml/badge.svg)](https://github.com/dedalo-org/dedalo/actions/workflows/security.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/dedalo-org/dedalo/badge)](https://scorecard.dev/viewer/?uri=github.com/dedalo-org/dedalo)
 [![handbook](https://img.shields.io/badge/docs-handbook-blue)](https://dedalo-org.github.io/dedalo/)
 [![api](https://img.shields.io/badge/api-docs.rs-blue)](https://docs.rs/dedalo)
 [![crates.io](https://img.shields.io/crates/v/dedalo.svg)](https://crates.io/crates/dedalo)
