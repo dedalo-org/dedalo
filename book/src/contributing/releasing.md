@@ -71,6 +71,9 @@ one pull request review.
 
 > **Careful** — never edit the version by hand. `scripts/bump-version.sh` is
 > the only thing allowed to change it, and the **Version** workflow drives it.
+> It writes three places: `Cargo.toml`, `Cargo.lock`, and `CITATION.cff` — a
+> citation naming a version that does not exist renders perfectly, which is why
+> it is the one most likely to rot.
 
 If step 4 fails after the tag exists, **fix forward**: delete the tag, merge the
 fix, re-run **Tag**. Never move a tag a release already published — somebody may
