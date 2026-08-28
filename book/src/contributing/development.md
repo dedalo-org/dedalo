@@ -41,6 +41,32 @@ Build and tests on Linux, macOS **and Windows**; the declared MSRV built with
 exactly that compiler; rustdoc with `-D warnings`; coverage; the musl packaging
 path; and public-API compatibility with the last release.
 
+Two more that are worth knowing about, because they fail on things a reviewer
+cannot see in a diff:
+
+**`handbook`** builds this book and resolves every relative link and every
+`#anchor` against the *rendered* tree. mdBook renders a broken link exactly as
+happily as a working one, so a renamed heading breaks every link pointing at it
+and nothing says so. Run it locally with `ws-check dedalo`, or by hand:
+
+```bash
+mdbook build book
+python3 scripts/check-book.py --src book/src --built target/book
+```
+
+**`dedalo on dedalo`** runs the release binary against this repository: `verify`
+on the project's own ledger, then a plan over its real merge history, asserting
+that the items plus the undistributed remainder equal the gross and that the fee
+split conserves the round. It is read-only — no `--save`, no `--execute` — and
+the amount is arbitrary.
+
+It catches three things the suite does not: a ledger that stopped verifying
+because the hashing changed (the unit tests build their own ledgers, so they
+would all still pass), a `dedalo.toml` that stopped parsing, and a plan that
+stops balancing on *real* history as opposed to generated history. It also
+asserts that the two fields `action.yml` extracts from `--json` are still
+extractable, because renaming one breaks the Action silently.
+
 ## Pull requests
 
 **Titles follow [Conventional Commits][cc]** and are checked automatically.
