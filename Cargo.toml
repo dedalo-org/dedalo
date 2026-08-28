@@ -88,6 +88,12 @@ libc = { version = "0.2", optional = true }
 # feature on for tests without turning it on for consumers.
 dedalo = { path = ".", features = ["testing"] }
 assert_cmd = "2"
+# Validates each command's real --json output against the schema published
+# beside it, so the schema cannot drift from the code. `default-features =
+# false` drops `reqwest` and a TLS stack: every `$ref` here is local, and a
+# test suite that can reach the network is a test suite that can be wrong
+# about why it passed.
+jsonschema = { version = "0.52", default-features = false }
 predicates = "3"
 proptest = "1"
 tempfile = "3"

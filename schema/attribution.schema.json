@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dedalo-org.github.io/dedalo/schema/v1/attribution.schema.json",
+  "title": "Dedalo attribution",
+  "description": "Output of `dedalo contributors --json`: what each contributor's work in the pending range is worth, before any amount is chosen.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contributions", "merges_analysed", "total_score"],
+  "properties": {
+    "contributions": {
+      "description": "Ordered by score, highest first. The order is load-bearing: `weights()` follows it, and a payout share is the weight at that index.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/contribution" }
+    },
+    "merges_analysed": { "type": "integer", "minimum": 0 },
+    "total_score": {
+      "description": "Sum of every contribution's score. Shares are computed against this, so a total of zero means an empty round rather than a division.",
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "$defs": {
+    "contribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["author", "score", "merges", "commits", "insertions", "deletions"],
+      "properties": {
+        "author": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "email"],
+          "properties": {
+            "name": { "type": "string" },
+            "email": {
+              "description": "Identities are matched on this, not on the name: two people can share a name.",
+              "type": "string"
+            }
+          }
+        },
+        "score": {
+          "description": "Integer milli-points, so the same history yields the same weights on every machine. Never a float.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "merges": { "type": "integer", "minimum": 0 },
+        "commits": { "type": "integer", "minimum": 0 },
+        "insertions": { "type": "integer", "minimum": 0 },
+        "deletions": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dedalo-org.github.io/dedalo/schema/v1/plan.schema.json",
+  "title": "Dedalo payout plan",
+  "description": "Output of `dedalo plan --json`, and the shape of a plan stored in .dedalo/objects. Content-addressed: `id` is a hash over everything that fixes the outcome, and `created_at` is deliberately not part of it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "project",
+    "created_at",
+    "asset",
+    "range",
+    "split",
+    "items"
+  ],
+  "properties": {
+    "id": {
+      "description": "Content hash of the plan. Two runs over the same history and config produce the same id.",
+      "type": "string",
+      "pattern": "^ded1[0-9a-f]{32}$"
+    },
+    "project": { "type": "string" },
+    "created_at": {
+      "description": "Unix seconds. Informational: excluded from `id`, so it cannot make two identical rounds look different.",
+      "type": "integer"
+    },
+    "asset": { "$ref": "#/$defs/asset" },
+    "range": { "$ref": "#/$defs/range" },
+    "split": { "$ref": "#/$defs/split" },
+    "items": {
+      "description": "Every transfer, contributors first. Exactly one entry per wallet: a contributor with several emails is merged before the plan is finalised.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/item" }
+    },
+    "undistributed": {
+      "description": "The part of the contributor pool that reached nobody. `items` plus this always equals `split.gross`.",
+      "$ref": "#/$defs/amount"
+    },
+    "unresolved": {
+      "description": "Contributors who earned a share and could not be paid. Never silently dropped.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/unresolved" }
+    }
+  },
+  "$defs": {
+    "amount": {
+      "description": "A count of base units. A decimal string, never a JSON number: numbers are IEEE doubles and lose precision above 2^53.",
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbol", "decimals", "chain"],
+      "properties": {
+        "symbol": { "type": "string" },
+        "decimals": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "chain": { "type": "string" },
+        "contract": {
+          "description": "Token contract address. Absent for a chain's native coin.",
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "range": {
+      "description": "The commit range this round pays for.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["branch", "to_commit"],
+      "properties": {
+        "branch": { "type": "string" },
+        "from_commit": {
+          "description": "Exclusive lower bound: the last commit already paid for. Absent on a first round.",
+          "type": ["string", "null"]
+        },
+        "to_commit": { "type": "string" },
+        "merges": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "split": {
+      "description": "How the gross amount was cut. The three shares sum to `gross` exactly.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gross", "protocol", "treasury", "contributors"],
+      "properties": {
+        "gross": { "$ref": "#/$defs/amount" },
+        "protocol": { "$ref": "#/$defs/amount" },
+        "treasury": { "$ref": "#/$defs/amount" },
+        "contributors": { "$ref": "#/$defs/amount" }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "handle", "wallet", "amount"],
+      "properties": {
+        "kind": { "enum": ["contributor", "treasury", "protocol"] },
+        "handle": {
+          "description": "Display name. Excluded from `id`: renaming somebody does not change what any address receives.",
+          "type": "string"
+        },
+        "wallet": { "type": "string" },
+        "amount": { "$ref": "#/$defs/amount" },
+        "score": {
+          "description": "Attribution weight in milli-points. Zero for fee recipients. Excluded from `id` — it is why, not what.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "share_bps": {
+          "description": "Share of the gross round in basis points, derived, for human review.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      }
+    },
+    "unresolved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "email", "score", "reason"],
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "score": { "type": "integer", "minimum": 0 },
+        "reason": {
+          "description": "Why they were left out. `excluded` is a decision somebody made; `no-wallet` is something somebody should fix; `ignored` is a rule in dedalo.toml.",
+          "enum": ["no-wallet", "excluded", "ignored"]
+        }
+      }
+    }
+  }
+}

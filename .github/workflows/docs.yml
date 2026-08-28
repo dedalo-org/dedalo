@@ -61,6 +61,12 @@ jobs:
           # deliberately has no index.html: the book renders one.
           cp -r target/book/. _site/
           cp -r site/. _site/
+          # The `--json` schemas, at the URL their own `$id` claims. A schema
+          # whose `$id` resolves to nothing is one a generated client cannot
+          # fetch, and the `$id` is the versioning scheme.
+          mkdir -p _site/schema/v1
+          cp schema/*.schema.json _site/schema/v1/
+          cp schema/README.md _site/schema/
           # Pages must not run Jekyll over the book's output.
           touch _site/.nojekyll
 
