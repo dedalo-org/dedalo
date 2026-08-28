@@ -92,7 +92,6 @@ jobs:
     permissions:
       contents: write
       packages: write
-    # Not `inherit`: the release workflow declares exactly one secret, so
-    # exactly one secret crosses the boundary.
-    secrets:
-      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    # No `secrets:` and emphatically not `inherit`. The release workflow needs
+    # none: crates.io mints a thirty-minute token from an OIDC claim, so
+    # nothing crosses this boundary that could be leaked or reused.

@@ -155,7 +155,30 @@ Publishing → Add**:
 | Environment | `crates-io` |
 
 The environment matters: it is what stops a workflow run from another branch,
-or a job that is not this one, from being able to publish at all.
+or a job that is not this one, from being able to publish at all — but only if
+the environment itself is restricted. An environment any run can reach is not a
+gate. `crates-io` therefore carries a **deployment tag policy of `v*`**:
+
+```console
+$ gh api repos/dedalo-org/dedalo/environments/crates-io/deployment-branch-policies \
+    --jq '.branch_policies[] | "\(.type): \(.name)"'
+tag: v*
+```
+
+So a run on a branch, on a pull request, or on a tag that is not a version tag
+cannot enter the environment, and therefore cannot mint a token even if
+everything else about it were right.
+
+There are **no repository or environment secrets at all**, which is checkable:
+
+```console
+$ gh api repos/dedalo-org/dedalo/actions/secrets --jq '.secrets[].name'
+$ gh api repos/dedalo-org/dedalo/environments/crates-io/secrets --jq '.secrets[].name'
+```
+
+Both empty. Neither `release.yml` nor `tag.yml` declares a `secrets:` block for
+publishing any more — a declared secret that is never used is an invitation to
+add the very thing this design removed.
 
 Until that entry exists, the `crates-io` job fails at the token exchange with a
 message naming the missing configuration — which is the right failure. Nothing
@@ -172,6 +195,57 @@ release publishes.
 > default *commit messages*, the pull request body never reaches the commit,
 > and a `BREAKING CHANGE:` declared there is silently lost from both the
 > changelog and the version bump.
+
+## Rehearsing the flow
+
+Doing a release for the first time on a version that publishes to crates.io —
+where nothing can be unpublished — is not the moment to discover which step is
+wrong. What can be rehearsed without publishing:
+
+**1. What the archive would contain.**
+
+```bash
+cargo package --list | sort     # read it; the exclude list is doing real work
+cargo package --locked          # builds the .crate, then compiles it from itself
+```
+
+`exclude` in `Cargo.toml` keeps `.github`, `site`, `.dedalo`, `dedalo.toml`,
+`scripts`, `action.yml`, `install.sh`, `cliff.toml`, `deny.toml`, `taplo.toml`
+and **`book/`** out of the archive. The handbook is published; it is megabytes a
+consumer does not unpack. Confirm from `cargo package --list` that none of them
+is in there — the current archive is 68 files and 159 KiB compressed.
+
+**2. The API reference**, with `cargo docs-rs` — see the section above.
+
+**3. The version bump**, with no side effects at all:
+
+```bash
+scripts/bump-version.sh patch --dry-run    # prints the next version, changes nothing
+```
+
+Then run the **Version** workflow against a scratch branch and read the pull
+request it opens: does the changelog section read like a release note, and is
+the version bumped in all three places?
+
+**4. The tag path cannot be rehearsed by hand, and that is the point.** `Tag`
+creates `v<version>` through the API and then *calls* `Release` directly,
+because GitHub suppresses events caused by `GITHUB_TOKEN`. A tag pushed by hand
+takes the **other** path — the `push:` trigger — so pushing one proves nothing
+about the indirection. What can be checked statically is that the two halves
+agree: `release.yml`'s `workflow_call` takes exactly `tag`, and `tag.yml` passes
+exactly `tag`. `actionlint` validates that call, and CI runs it.
+
+**5. Artifact verification is not yet rehearsable.** `v0.0.0` has no assets —
+its `github-release` job failed, which is what protected the hand-written
+release notes — so
+
+```bash
+gh attestation verify dedalo-*.tar.gz --repo dedalo-org/dedalo
+```
+
+has nothing to run against. The first release that ships binaries is the first
+chance to confirm the instruction above is right, and confirming it is part of
+cutting that release rather than something to assume.
 
 ## Verifying a release
 
