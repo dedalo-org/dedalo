@@ -122,5 +122,47 @@ tests, and `tests/adversarial.rs` asks specifically whether two different
 histories can be made to produce the same weights, or one history two different
 sets.
 
+## What it costs
+
+Attribution itself is free. Reading the history is not.
+
+Measured on generated repositories with four authors and eight changed lines
+per merge, on an ordinary machine, in release mode:
+
+| Merges | `scan` | `attribute` | `plan` |
+| ---: | ---: | ---: | ---: |
+| 100 | 0.36 s | 0.03 ms | 2.5 ms |
+| 1,000 | 3.9 s | 1.3 ms | 3.6 ms |
+| 10,000 | 56 s | 3.1 ms | 2.7 ms |
+
+**Roughly four seconds per thousand merges**, and the two stages that decide
+what anybody is paid are microseconds. The cost is entirely `git`: one process
+per landed change, computing its diff against the first parent. Optimising the
+scoring would save nothing.
+
+The shape is close to linear — the per-merge cost grows about 1.15× between two
+hundred merges and two thousand, which is the ordinary slowdown of `git log`
+over a longer history rather than an accidental quadratic. That ratio is what
+`tests/performance.rs` asserts, since a benchmark that fails on a 5% change is
+noise and one that fails on a change of *shape* is a real guard.
+
+### The number that matters is the unpaid range, not the repository
+
+`scan` reads every landed change **since the last settled commit**. On a
+project that settles monthly, that is a month of merges however old the
+repository is. On a first round there is no ledger, so it is the whole
+history — and that is the run that happens inside a CI job with a timeout.
+
+If a first round is going to be large, run `dedalo plan --since <rev>` and pay
+the backlog deliberately, rather than discovering the cost in a pipeline.
+
+`dedalo scan --limit N` reads only what it shows, so it is cheap regardless.
+
+Reproduce any of this:
+
+```bash
+cargo test --release --all-features --test performance -- --ignored --nocapture
+```
+
 [reviews]: https://github.com/dedalo-org/dedalo/issues/12
 [squash]: https://github.com/dedalo-org/dedalo/issues/13
