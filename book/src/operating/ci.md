@@ -39,6 +39,19 @@ jobs:
 > Action detects a shallow clone and unshallows it with a warning, but the
 > warning is easy to miss in a green run.
 
+### How long it takes
+
+Roughly **four seconds per thousand landed changes** in the range being paid
+for — 56 seconds for ten thousand. The cost is `git`, one process per change;
+scoring and planning are milliseconds. The measurements are in
+[Attribution](../concepts/attribution.md#what-it-costs).
+
+The range is what matters, not the repository. A project that settles monthly
+pays for a month of merges however old it is. **A first round has no ledger and
+therefore covers the whole history**, which is the run most likely to meet a
+job timeout — so cut the backlog deliberately with `--since` rather than
+finding out in a pipeline.
+
 ## Inputs
 
 | Input | Default | Meaning |

@@ -331,9 +331,8 @@ reason = "Prints what chain/settlement/proposal built."
 
 [modules."cli/commands/scan"]
 method = "exempt"
-arithmetic_sites = 1
+arithmetic_sites = 0
 reason = "Prints merges and contribution scores."
-arithmetic_is_not_money = "`merges.len().saturating_sub(limit)` — how many merges to skip when printing."
 
 [modules."cli/commands/settle"]
 method = "exempt"

@@ -8,12 +8,11 @@ use crate::cli::args::RangeArgs;
 use crate::cli::ui::{self, Align, Table};
 
 pub fn scan(engine: &Engine, args: &RangeArgs, json: bool) -> Result<()> {
-    let mut merges = engine.scan(args.since.as_deref())?;
-    if let Some(limit) = args.limit {
-        // Keep the most recent merges when truncating.
-        let skip = merges.len().saturating_sub(limit);
-        merges.drain(..skip);
-    }
+    // The limit goes into the query rather than being applied to the result.
+    // Truncating afterwards meant `--limit 10` computed a diff for every merge
+    // in the repository and then discarded all but ten — on a first round,
+    // with no ledger, that is the entire history.
+    let merges = engine.scan_recent(args.since.as_deref(), args.limit)?;
 
     if json {
         return crate::cli::commands::print_json(&merges);
@@ -51,12 +50,25 @@ pub fn scan(engine: &Engine, args: &RangeArgs, json: bool) -> Result<()> {
     }
     print!("{}", table.render());
     println!();
-    println!(
-        "{} {} pending on {}",
-        ui::bold(&merges.len().to_string()),
-        unit.1,
-        engine.config().git.branch
-    );
+    // With a limit in effect, how many are pending is a question this command
+    // deliberately did not do the work to answer. Saying "10 merges pending"
+    // because ten were read would be a confident wrong answer about how much a
+    // round owes.
+    if args.limit.is_some() {
+        println!(
+            "showing the {} most recent {} on {} — pass no --limit for the whole range",
+            ui::bold(&merges.len().to_string()),
+            unit.1,
+            engine.config().git.branch
+        );
+    } else {
+        println!(
+            "{} {} pending on {}",
+            ui::bold(&merges.len().to_string()),
+            unit.1,
+            engine.config().git.branch
+        );
+    }
     Ok(())
 }
 

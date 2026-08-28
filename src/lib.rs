@@ -202,6 +202,37 @@ impl Engine {
     /// `since` overrides the ledger cursor; passing `None` continues from the
     /// last settled commit, so re-running never pays for the same work twice.
     pub fn scan(&self, since: Option<&str>) -> Result<Vec<MergeEvent>> {
+        self.scan_recent(since, None)
+    }
+
+    /// Like [`Engine::scan`], reading at most `limit` of the newest changes.
+    ///
+    /// # This is for looking, not for paying
+    ///
+    /// A plan built from a limited scan pays only the contributors that
+    /// happened to fit, and it would balance perfectly while being wrong — the
+    /// arithmetic has no way to know that history was withheld from it. Every
+    /// path that decides an amount calls [`Engine::scan`], which reads
+    /// everything since the last settled commit.
+    ///
+    /// # Why it exists
+    ///
+    /// `dedalo scan --limit 10` used to read the whole history — one diff per
+    /// merge, back to the first commit on a repository with no ledger — and
+    /// then discard all but ten rows. The limit belongs in the query, where
+    /// `git log --max-count` can act on it.
+    ///
+    /// # The count is not exact
+    ///
+    /// The cap is applied by git, and subjects ignored by `dedalo.toml` are
+    /// filtered afterwards, so a limit of ten can return fewer than ten. That
+    /// is the honest trade for not reading the history twice, and it is why
+    /// the command line reports what it showed rather than what is pending.
+    pub fn scan_recent(
+        &self,
+        since: Option<&str>,
+        limit: Option<usize>,
+    ) -> Result<Vec<MergeEvent>> {
         let cursor = match since {
             Some(rev) => Some(self.repo.resolve(rev)?),
             None => self.state()?.last_settled_commit,
@@ -210,7 +241,7 @@ impl Engine {
             branch: self.resolve_branch()?,
             since_commit: cursor,
             since_timestamp: None,
-            limit: None,
+            limit,
             lands_as: self.config.git.lands_as,
         };
         let merges = self.repo.merges(&query)?;
