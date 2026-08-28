@@ -1,0 +1,40 @@
+# How to cite Dedalo.
+#
+# GitHub renders a "Cite this repository" button from this file, and Zenodo
+# reads it if the repository is ever archived there. It exists because this
+# project makes checkable claims — exhaustive proofs over the fee schedule, a
+# hash-chained ledger, a stated threat model — and that is the kind of thing
+# that gets cited in work on funding mechanisms or supply-chain provenance.
+# A citation derived from this file is right; one derived from a URL in a
+# footnote rots.
+#
+# `version` and `date-released` are updated by scripts/bump-version.sh, which
+# is the only thing allowed to change a version in this repository.
+cff-version: 1.2.0
+message: "If you use Dedalo in academic work, please cite it as below."
+title: "Dedalo: deterministic merge-to-earn funding for open source"
+abstract: >-
+  Dedalo turns git merges into contributor payouts. Attribution, the fee split
+  and the payout plan are deterministic and offline: the same history and
+  configuration produce a byte-identical, content-addressed plan on any
+  machine. Money is held as integers of base units and percentages as basis
+  points; splits use the largest-remainder method and conserve every base
+  unit. Settlement is a pull model — a round is deposited once against a
+  Merkle root and contributors claim — and the tool holds no signing key,
+  proposing transactions for people to sign rather than broadcasting them.
+type: software
+authors:
+  - name: "Dedalo contributors"
+    website: "https://github.com/dedalo-org/dedalo/graphs/contributors"
+repository-code: "https://github.com/dedalo-org/dedalo"
+url: "https://dedalo-org.github.io/dedalo/"
+license: MIT
+version: 0.0.0
+date-released: "2026-08-26"
+keywords:
+  - open-source-funding
+  - merge-to-earn
+  - git
+  - reproducible-builds
+  - attribution
+  - payouts
