@@ -4,13 +4,22 @@
   "enforcement": "active",
   "conditions": {
     "ref_name": {
-      "include": ["~DEFAULT_BRANCH"],
-      "exclude": []
+      "exclude": [],
+      "include": [
+        "~DEFAULT_BRANCH"
+      ]
     }
   },
   "rules": [
-    { "type": "deletion" },
-    { "type": "non_fast_forward" },
+    {
+      "type": "creation"
+    },
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    },
     {
       "type": "pull_request",
       "parameters": {
@@ -19,8 +28,17 @@
         "require_code_owner_review": true,
         "require_last_push_approval": false,
         "required_review_thread_resolution": true,
-        "allowed_merge_methods": ["squash"]
+        "require_extra_approval_for_unattributed_changes": false,
+        "allowed_merge_methods": [
+          "squash"
+        ]
       }
+    },
+    {
+      "type": "required_linear_history"
+    },
+    {
+      "type": "required_signatures"
     },
     {
       "type": "required_status_checks",
@@ -28,17 +46,24 @@
         "strict_required_status_checks_policy": true,
         "do_not_enforce_on_create": false,
         "required_status_checks": [
-          { "context": "CI" },
-          { "context": "conventional commit format" }
+          {
+            "context": "CI"
+          },
+          {
+            "context": "conventional commit format"
+          }
         ]
       }
+    },
+    {
+      "type": "update"
     }
   ],
   "bypass_actors": [
     {
-      "actor_id": 5,
       "actor_type": "RepositoryRole",
-      "bypass_mode": "pull_request"
+      "bypass_mode": "pull_request",
+      "actor_id": 5
     }
   ]
 }
