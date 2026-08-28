@@ -491,6 +491,18 @@ enforced in `src/money/proofs.rs`, `src/payout/proofs.rs` and
 `tests/adversarial.rs`.
 Security issues go through [SECURITY.md](SECURITY.md), never a public issue.
 
+## Who decides things here
+
+One maintainer, which is the honest state and a weakness rather than a
+structure. [MAINTAINERS.md](MAINTAINERS.md) names who merges, who releases, who
+holds the crates.io ownership, and what the protocol fee funds.
+
+Anything that changes what people are paid, what a guarantee means, or what
+capability the software has gets a numbered record under
+[docs/decisions/](docs/decisions/). Those records are **binding**: if the code
+disagrees with one, one of the two is wrong, and the answer is not to quietly
+change the code.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
