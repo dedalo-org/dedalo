@@ -33,6 +33,13 @@
 
 #![warn(missing_docs)]
 #![warn(rustdoc::broken_intra_doc_links)]
+// docs.rs and CI's rustdoc job both build with `--cfg docsrs` on nightly. It
+// exists so that a feature-gated item says which feature gates it, rather than
+// appearing in the reference as if it were always there — `dedalo::testing` in
+// particular reads like part of the API until you try to use it without
+// turning the feature on. Nothing else in the crate reads this cfg, and a
+// stable build ignores it entirely.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 // One module per concern, and every one of them a directory. A file at the
 // top of `src/` is a concern nobody has decided the shape of yet.
@@ -53,9 +60,11 @@ pub mod config;
 pub mod error;
 
 #[cfg(feature = "cli")]
+#[cfg_attr(docsrs, doc(cfg(feature = "cli")))]
 pub mod cli;
 
 #[cfg(feature = "testing")]
+#[cfg_attr(docsrs, doc(cfg(feature = "testing")))]
 pub mod testing;
 
 pub use config::Config;

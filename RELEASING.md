@@ -173,6 +173,46 @@ release publishes.
 > and a `BREAKING CHANGE:` declared there is silently lost from both the
 > changelog and the version bump.
 
+## The API reference is built by docs.rs, not by us
+
+The README and the handbook both send readers to
+[docs.rs/dedalo](https://docs.rs/dedalo). docs.rs builds **per released
+version**, in a sandbox with no network, a time limit, and its own target set —
+so a crate that documents fine locally can still fail there, and when it does
+the crate page shows a build failure to everyone who follows that link.
+
+What is published:
+
+```toml
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+targets = ["x86_64-unknown-linux-gnu"]
+```
+
+- **`all-features`** turns on `cli` **and** `testing`. Both gate public items,
+  and a reference that omits them is a reference to a crate nobody has.
+- **`--cfg docsrs`** is not decoration: `src/lib.rs` reads it, through
+  `#![cfg_attr(docsrs, feature(doc_cfg))]`, so a feature-gated module says
+  *"Available on crate feature `testing` only"* instead of appearing as if it
+  were always there. A stable build ignores the cfg entirely.
+- **One target**, because nothing public varies by platform — the only
+  `cfg(unix)` in the crate is a private signal handler. Building five costs
+  docs.rs time for an identical page, and a timeout there is a failed build
+  page.
+
+**Rehearse it before a release**, with the tool that builds the same way docs.rs
+does — offline, with the same flags:
+
+```bash
+cargo install cargo-docs-rs --locked
+cargo +nightly docs-rs
+```
+
+The two doctests in the crate are both `no_run`, which is what keeps them from
+needing a repository or a `git` binary. docs.rs runs no tests, but they still
+have to compile; `cargo test --doc` is what checks that.
+
 ## Verifying a release
 
 Anyone can check that a published binary matches what the tag says:
