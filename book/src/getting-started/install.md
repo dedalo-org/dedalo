@@ -102,5 +102,21 @@ $ dedalo --version
 dedalo 0.1.0
 ```
 
+## Completions and the man page
+
+Nothing installs these for you, on purpose. `dedalo` generates them from its
+own argument definitions:
+
+```console
+$ dedalo completions bash > ~/.local/share/bash-completion/completions/dedalo
+$ dedalo man > /usr/local/share/man/man1/dedalo.1
+```
+
+`install.sh` prints the right command for your shell and does not run it.
+Release archives already contain both, under `completions/` and `man/man1/`.
+
+See [the command reference](../reference/cli.md#dedalo-completions-shell) for
+where each shell expects its script.
+
 [releases]: https://github.com/dedalo-org/dedalo/releases
 [install]: https://github.com/dedalo-org/dedalo/blob/main/install.sh

@@ -101,6 +101,33 @@ main() {
       say "  export PATH=\"$INSTALL_DIR:\$PATH\""
       ;;
   esac
+
+  suggest_completions
+}
+
+# Print the command; never run it.
+#
+# Writing into somebody's shell configuration from a script they piped to sh is
+# the reason people stop piping scripts to sh — rightly. So this says where the
+# completions would go and what to type, and stops there. The archive already
+# contains a generated copy under completions/ for a packager who wants one.
+suggest_completions() {
+  shell_name=$(basename "${SHELL:-}")
+  case "$shell_name" in
+    bash) dir="${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions"; file="dedalo" ;;
+    zsh) dir="${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions"; file="_dedalo" ;;
+    fish) dir="${XDG_CONFIG_HOME:-$HOME/.config}/fish/completions"; file="dedalo.fish" ;;
+    *) return 0 ;;
+  esac
+
+  say ""
+  say "Shell completions for $shell_name are not installed. To install them:"
+  say "  mkdir -p \"$dir\""
+  say "  $BIN completions $shell_name > \"$dir/$file\""
+  if [ ! -d "$dir" ] || [ ! -w "$dir" ]; then
+    say ""
+    say "($dir is not writable yet; the mkdir above creates it.)"
+  fi
 }
 
 main "$@"
