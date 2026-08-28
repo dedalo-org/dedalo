@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dedalo-org.github.io/dedalo/schema/v1/verify.schema.json",
+  "title": "Dedalo ledger verification",
+  "description": "Output of `dedalo verify --json`: whether the hash-chained ledger in .dedalo/ is internally consistent. Needs no network and no key — anyone with a clone can run it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "entries", "plans_checked", "problems"],
+  "properties": {
+    "ok": {
+      "description": "Also reflected in the exit code, so a script can branch on either.",
+      "type": "boolean"
+    },
+    "head": {
+      "description": "Id of the newest entry, or null for a ledger with no entries yet.",
+      "type": ["string", "null"]
+    },
+    "entries": { "type": "integer", "minimum": 0 },
+    "plans_checked": { "type": "integer", "minimum": 0 },
+    "problems": {
+      "description": "Empty when `ok` is true. An entry edited after the fact breaks every id since, so one edit usually reports many problems.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["plan", "reason"],
+        "properties": {
+          "plan": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    }
+  }
+}

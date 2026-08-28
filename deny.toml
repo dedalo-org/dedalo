@@ -43,6 +43,12 @@ allow = [
   "ISC",
   "Unicode-3.0",
   "Unlicense",
+  # Permissive, OSI-approved, and no more restrictive than MIT. It arrives via
+  # `foldhash`, under the `jsonschema` dev-dependency that validates the
+  # published `--json` schemas — so it reaches no released artifact. Listed
+  # rather than skipped because the policy above is about what downstream
+  # projects can do with Dedalo, and Zlib does not narrow that.
+  "Zlib",
 ]
 confidence-threshold = 0.9
 

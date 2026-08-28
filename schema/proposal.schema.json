@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dedalo-org.github.io/dedalo/schema/v1/proposal.schema.json",
+  "title": "Dedalo round proposal",
+  "description": "Output of `dedalo propose --json`: everything a multisig signer needs to fund one round. Dedalo signs nothing and holds no key \u2014 this is what people execute.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "plan_id",
+    "merkle_root",
+    "claim_program",
+    "total",
+    "claims",
+    "instructions"
+  ],
+  "properties": {
+    "plan_id": {
+      "description": "The plan being funded. Passed on chain, so a round can be deposited once.",
+      "type": "string",
+      "pattern": "^ded1[0-9a-f]{32}$"
+    },
+    "merkle_root": {
+      "description": "Root of the tree contributors prove against.",
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "claim_program": {
+      "description": "Program that holds the deposit and pays claims.",
+      "type": "string"
+    },
+    "token": {
+      "description": "Token being distributed. Null for the chain's native coin.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "total": {
+      "description": "Sum of every claim. What the deposit must cover exactly.",
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "claims": {
+      "description": "How many contributors can claim.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "instructions": {
+      "description": "Ordered. They are not independent: a deposit before its approval fails.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/instruction"
+      }
+    }
+  },
+  "$defs": {
+    "instruction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "step",
+        "description",
+        "cluster",
+        "program_id",
+        "accounts",
+        "data"
+      ],
+      "properties": {
+        "step": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "description": {
+          "description": "What this does, for the person deciding whether to sign.",
+          "type": "string"
+        },
+        "cluster": {
+          "description": "Which cluster to execute on. A signer with several configured is told, not left to guess.",
+          "type": "string"
+        },
+        "program_id": {
+          "type": "string"
+        },
+        "accounts": {
+          "description": "Ordered: Anchor matches them positionally, so order is part of the interface.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/account"
+          }
+        },
+        "data": {
+          "description": "Instruction data, as bare hex \u2014 no `0x`. Note that `merkle_root` above IS `0x`-prefixed: a signer looking for the root inside this string has to strip the prefix first. The forms differ because `0x` is an EVM convention and Solana instruction data is not written that way; changing either now would break the contract, so the schema states it rather than hiding it.",
+          "type": "string",
+          "pattern": "^[0-9a-f]*$"
+        }
+      }
+    },
+    "account": {
+      "description": "One account the instruction takes. Exactly one of `address` and `derivation` is present: a program-derived address cannot be computed before the claim program exists, and printing a made-up one would be inventing on-chain behaviour.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "signer",
+        "writable"
+      ],
+      "properties": {
+        "role": {
+          "type": "string"
+        },
+        "address": {
+          "type": "string"
+        },
+        "derivation": {
+          "description": "The seeds the program must use, where the address is derived.",
+          "type": "string"
+        },
+        "signer": {
+          "type": "boolean"
+        },
+        "writable": {
+          "type": "boolean"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "address"
+          ]
+        },
+        {
+          "required": [
+            "derivation"
+          ]
+        }
+      ]
+    }
+  }
+}

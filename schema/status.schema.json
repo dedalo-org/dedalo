@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dedalo-org.github.io/dedalo/schema/v1/status.schema.json",
+  "title": "Dedalo project status",
+  "description": "Output of `dedalo status --json`: what is pending, what the rules are, and what has been settled. The obvious thing for a bot to poll.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "project",
+    "branch",
+    "asset",
+    "lands_as",
+    "pending_changes",
+    "pending_contributors",
+    "fees",
+    "settlement_backend",
+    "identities",
+    "state"
+  ],
+  "properties": {
+    "project": { "type": "string" },
+    "branch": { "type": "string" },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbol", "decimals", "chain"],
+      "properties": {
+        "symbol": { "type": "string" },
+        "decimals": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "chain": { "type": "string" },
+        "contract": { "type": ["string", "null"] }
+      }
+    },
+    "lands_as": {
+      "description": "How a change is recognised on this branch. `commits` is what a squash-merge repository needs, and getting it wrong changes what everybody is paid.",
+      "enum": ["merges", "commits"]
+    },
+    "pending_changes": {
+      "description": "Changes landed since the last settled round. Named `changes` rather than `merges` because on a squash-merge repository they are not merge commits.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "pending_contributors": { "type": "integer", "minimum": 0 },
+    "fees": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_bps", "treasury_bps", "contributor_bps"],
+      "properties": {
+        "protocol_bps": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "treasury_bps": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "contributor_bps": {
+          "description": "Derived — whatever the other two leave. Emitted anyway, because a consumer computing it would be a second implementation of the one subtraction that decides how much contributors get.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      }
+    },
+    "settlement_backend": { "type": "string" },
+    "identities": { "type": "integer", "minimum": 0 },
+    "state": {
+      "description": "What the ledger records. Every field is null until a round has been settled — a project that has never paid anybody says so rather than reporting zeroes that look like a settled round of nothing.",
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["lifetime_paid", "lifetime_protocol_fees"],
+      "properties": {
+        "last_settled_commit": { "type": ["string", "null"] },
+        "last_settled_plan": { "type": ["string", "null"] },
+        "last_settled_at": { "type": ["integer", "null"] },
+        "lifetime_paid": { "type": "string", "pattern": "^[0-9]+$" },
+        "lifetime_protocol_fees": { "type": "string", "pattern": "^[0-9]+$" }
+      }
+    }
+  }
+}

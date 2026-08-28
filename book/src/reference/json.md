@@ -7,6 +7,32 @@ renaming one fails the build instead of silently breaking the Action.
 Treat it as a public API. Removing or renaming a field is a breaking change
 under [the release policy](../contributing/releasing.md).
 
+## There is a schema, and it cannot drift
+
+This page is prose. The authoritative description is
+[JSON Schema][schema], one file per command:
+
+| Schema | Command |
+| --- | --- |
+| `plan.schema.json` | `dedalo plan --json` |
+| `attribution.schema.json` | `dedalo contributors --json` |
+| `status.schema.json` | `dedalo status --json` |
+| `verify.schema.json` | `dedalo verify --json` |
+| `proposal.schema.json` | `dedalo propose --json` |
+
+`tests/json_schema.rs` runs each command against a real repository and
+validates the actual output. A field renamed in Rust and not in the schema
+fails the build — and because every schema is `additionalProperties: false`,
+so does a field **added** without being declared.
+
+The version lives in the `$id` (`…/schema/v1/plan.schema.json`) rather than in
+a `schema_version` field in the payload. A plan is stored in `.dedalo/objects`
+and content-addressed, and a field describing the encoding does not belong
+inside a record that is supposed to be exactly the round — the plan already
+carries `ENCODING_VERSION` where it matters, inside `compute_id`.
+
+[schema]: https://github.com/dedalo-org/dedalo/tree/main/schema
+
 ## Amounts are strings
 
 ```json
@@ -180,25 +206,60 @@ The serialised `RoundProposal`:
 
 ```json
 {
-  "plan_id": "ded106bd7281…",
-  "merkle_root": "0x…",
-  "claim_contract": "0x…",
-  "token": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-  "total": "825000000",
-  "claims": 3,
-  "transactions": [
-    { "step": 1, "description": "approve the claim contract to move 825 USDC",
-      "chain_id": 8453, "to": "0x8335…", "value": "0", "data": "0x095ea7b3…" },
-    { "step": 2, "description": "deposit round ded106bd7281 against its root",
-      "chain_id": 8453, "to": "0x…", "value": "0", "data": "0x…" }
+  "plan_id": "ded1cca6908713abb0e403d7b2f966aeb602",
+  "merkle_root": "0x7a9d848345763e06…",
+  "claim_program": "MerkS3LaQBSvM5JZsvBaLZBBSMvMB5aTuLRHrvKAyDo",
+  "token": "So11111111111111111111111111111111111111112",
+  "total": "175000000",
+  "claims": 2,
+  "instructions": [
+    {
+      "step": 1,
+      "description": "delegate 175 USDC to the round vault",
+      "cluster": "devnet",
+      "program_id": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "accounts": [
+        { "role": "source token account, held by the multisig",
+          "derivation": "associated token account of the signing multisig for mint So111…",
+          "signer": false, "writable": true }
+      ],
+      "data": "04c0496e0a00000000"
+    },
+    {
+      "step": 2,
+      "description": "deposit round ded1cca69087 against root 0x7a9d84…",
+      "cluster": "devnet",
+      "program_id": "MerkS3LaQBSvM5JZsvBaLZBBSMvMB5aTuLRHrvKAyDo",
+      "accounts": [
+        { "role": "round record",
+          "derivation": "PDA of MerkS3… with seeds [\"round\", plan_id]",
+          "signer": false, "writable": true },
+        { "role": "SPL Token program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "signer": false, "writable": false }
+      ],
+      "data": "f223c68952e1f2b6…"
+    }
   ]
 }
 ```
 
 `total` is the sum of every claim, and it is what the deposit must cover
-exactly. `transactions` is ordered: a deposit before its approval reverts.
+exactly. `instructions` is ordered: a deposit before its delegation fails.
 `data` is what a signer compares against the plan — see
 [what a signer should check](../operating/multisig.md#what-a-signer-should-check).
+
+Each account carries **either** `address` **or** `derivation`, never both.
+A program-derived address cannot be computed before the claim program exists,
+so the proposal states the seeds the program must use and leaves the arithmetic
+to whoever builds the transaction. Printing a computed address for a program
+nobody has written would be inventing on-chain behaviour.
+
+> **Careful** — `merkle_root` is `0x`-prefixed and `data` is not. A signer
+> looking for the root inside the instruction data has to strip the prefix
+> first. The two forms differ because `0x` is an EVM convention and Solana
+> instruction data is not written that way; the schema states it rather than
+> hiding it.
 
 ## `dedalo identity link --json`
 
