@@ -740,6 +740,8 @@ fn help_hides_the_generators_but_still_names_them() {
         .arg("--help")
         .assert()
         .success()
-        .stdout(contains("dedalo completions <bash|zsh|fish|powershell|elvish>"))
+        .stdout(contains(
+            "dedalo completions <bash|zsh|fish|powershell|elvish>",
+        ))
         .stdout(contains("dedalo man"));
 }
