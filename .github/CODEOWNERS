@@ -21,7 +21,10 @@
 /tests/verification_manifest.rs     @4137314
 
 # Decisions the code is checked against rather than the other way round.
+# A record is binding: if the code disagrees with one, the code is what moves.
 /docs/settlement-architecture.md    @4137314
+/docs/decisions/                    @4137314
+/MAINTAINERS.md                     @4137314
 
 # Anything that can publish, sign, or ship a binary.
 /.github/workflows/                 @4137314

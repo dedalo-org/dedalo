@@ -46,6 +46,7 @@
 # Contributing
 
 - [Development](contributing/development.md)
+- [Governance](contributing/governance.md)
 - [Releasing](contributing/releasing.md)
 - [Roadmap](contributing/roadmap.md)
 

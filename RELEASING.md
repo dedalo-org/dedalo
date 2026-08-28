@@ -140,7 +140,8 @@ running this workflow in this environment.
 
 A long-lived registry token is a credential that sits in a settings page until
 somebody leaks it, and it is exactly the thing
-[Decision 2](docs/settlement-architecture.md) refuses for the money path. The
+[decision 0002](docs/decisions/0002-no-signing-key.md) refuses for the money
+path. The
 same argument applies to the thing that ships the code, and this is now the
 industry default rather than a preference of ours.
 

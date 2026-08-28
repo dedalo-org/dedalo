@@ -236,8 +236,8 @@ jobs:
       # long-lived registry token in this repository's secrets, so there is
       # none to leak, rotate, or find in a fork's pull request.
       #
-      # It is also Decision 2 of docs/settlement-architecture.md applied to the
-      # thing that ships the code rather than to the thing that moves money —
+      # It is also docs/decisions/0002-no-signing-key.md applied to the thing
+      # that ships the code rather than to the thing that moves money —
       # the same argument, and it happens to be the industry default now.
       id-token: write
     steps:
