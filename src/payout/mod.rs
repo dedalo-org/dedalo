@@ -562,4 +562,127 @@ mod tests {
         assert_eq!(plan.items.iter().filter(|i| i.wallet == ada).count(), 1);
         plan.verify().unwrap();
     }
+
+    /// Every reason a contributor is not paid appears in the plan, by name.
+    ///
+    /// "Nobody is silently dropped" is one of the invariants this project
+    /// exists for, and it has three shapes: an ignored email, an excluded
+    /// identity, and a contributor with no wallet. Only the third had a test —
+    /// the other two variants of `UnresolvedReason` were constructed nowhere
+    /// outside the code that produces them, so nothing said whether a bot and
+    /// an opted-out maintainer are told apart.
+    ///
+    /// They must be. "Excluded" is a decision somebody made; "no wallet" is a
+    /// thing somebody should fix; "ignored" is a rule in the config. Reporting
+    /// one as another sends a person chasing the wrong problem.
+    #[test]
+    fn every_reason_a_contributor_is_unpaid_is_named_in_the_plan() {
+        let (mut config, mut attribution) = setup();
+
+        config.git.ignore_emails = vec!["bot@ci.example".into()];
+        config.identities.push(Identity {
+            handle: "cy".into(),
+            wallet: None,
+            emails: vec!["cy@x.io".into()],
+            excluded: true,
+        });
+        // Known to the project, not excluded, and simply has no address on
+        // file. This is the case `identity missing` exists to surface, and it
+        // is a different reason from "we have never heard of this email".
+        config.identities.push(Identity {
+            handle: "dee".into(),
+            wallet: None,
+            emails: vec!["dee@x.io".into()],
+            excluded: false,
+        });
+
+        for (email, score) in [
+            ("bot@ci.example", 2_000),
+            ("cy@x.io", 1_500),
+            ("dee@x.io", 750),
+            ("ghost@x.io", 500),
+        ] {
+            attribution.contributions.push(contribution(email, score));
+            attribution.total_score += score;
+        }
+
+        let gross = Amount::from_base_units(1_000_000);
+        let plan = PlanBuilder::new(&config, &attribution, range(), gross)
+            .created_at(0)
+            .build()
+            .unwrap();
+
+        let reason_for = |email: &str| {
+            plan.unresolved
+                .iter()
+                .find(|u| u.email == email)
+                .unwrap_or_else(|| panic!("{email} is not in plan.unresolved"))
+                .reason
+        };
+
+        assert_eq!(reason_for("bot@ci.example"), UnresolvedReason::Ignored);
+        assert_eq!(reason_for("cy@x.io"), UnresolvedReason::Excluded);
+        // Two different ways to have no wallet, both reported the same way:
+        // one is a known contributor who has not linked, the other is somebody
+        // the config has never heard of.
+        assert_eq!(reason_for("dee@x.io"), UnresolvedReason::NoWallet);
+        assert_eq!(reason_for("ghost@x.io"), UnresolvedReason::NoWallet);
+
+        assert_eq!(plan.unresolved.len(), 4);
+        assert_eq!(plan.total().unwrap(), gross);
+        plan.verify().unwrap();
+
+        // Their weight leaves the split, so the whole contributor pool still
+        // reaches the two who can be paid — `undistributed` is for a pool that
+        // reached *nobody*, not for one that reached fewer people. The
+        // difference is why they are listed: redistribution is fine, silent
+        // redistribution is not.
+        assert!(plan.undistributed.is_zero());
+        let paid: u128 = plan
+            .items
+            .iter()
+            .filter(|item| item.kind == PayeeKind::Contributor)
+            .map(|item| item.amount.base_units())
+            .sum();
+        assert_eq!(paid, plan.split.contributors.base_units());
+
+        // The score they earned is reported even though they are not paid it —
+        // that is what makes the number checkable rather than a shrug.
+        let ignored = plan
+            .unresolved
+            .iter()
+            .find(|u| u.email == "bot@ci.example")
+            .unwrap();
+        assert_eq!(ignored.score, 2_000);
+    }
+
+    /// A round with nothing in the contributor pool still adds up.
+    ///
+    /// `bps_of` divides by the gross, and a zero gross is the one input that
+    /// cannot be divided by. It returns zero rather than panicking, and
+    /// nothing exercised that.
+    #[test]
+    fn a_round_of_nothing_is_a_plan_that_pays_nothing() {
+        let (config, attribution) = setup();
+        let plan = PlanBuilder::new(&config, &attribution, range(), Amount::ZERO)
+            .created_at(0)
+            .build()
+            .unwrap();
+
+        assert_eq!(plan.total().unwrap(), Amount::ZERO);
+        assert!(plan.items.iter().all(|item| item.amount.is_zero()));
+        plan.verify().unwrap();
+
+        // A contributor's share is derived from what they received, so a share
+        // of nothing is zero. The fee items report the *rate* they are
+        // configured at, which is 15% and 2.5% of nothing — still 15% and
+        // 2.5%, and saying otherwise would misreport the schedule.
+        for item in &plan.items {
+            match item.kind {
+                PayeeKind::Contributor => assert_eq!(item.share_bps, 0),
+                PayeeKind::Treasury => assert_eq!(item.share_bps, 1_500),
+                PayeeKind::Protocol => assert_eq!(item.share_bps, 250),
+            }
+        }
+    }
 }

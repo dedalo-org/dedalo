@@ -6,6 +6,18 @@
 # and compares it to `arithmetic_sites`: if the count moves, the build fails
 # and the change has to be looked at rather than absorbed.
 #
+# `coverage_floor` is the second thing this file holds down: the percentage of
+# lines in a module that tests must reach, checked by scripts/check-coverage.py
+# against `cargo llvm-cov`. It lives here rather than in the workflow because
+# this is already where "how is this module held down" is answered, and two
+# files answering it is how they disagree.
+#
+# It is deliberately per module and not one global number. A single percentage
+# would be satisfied by testing the CLI's table renderer and would say nothing
+# about `money`. A module with no floor is not held to one — `cli` and `git`
+# are covered by tests against real repositories and real binaries, and a
+# line-coverage floor there would reward mocking.
+#
 # The methods, strongest first. The distinction is not decoration:
 #
 #   exhaustive  Every value in a complete finite domain is tried. Passing is a
@@ -30,6 +42,7 @@ schema = 2
 
 [modules.money]
 method = "exhaustive"
+coverage_floor = 100
 arithmetic_sites = 10
 harnesses = [
   "money::proofs::every_basis_point_value_rounds_down_and_never_exceeds_the_input",
@@ -42,6 +55,7 @@ sampled by the property tests in the same file, not proved."""
 
 [modules."money/treasury"]
 method = "exhaustive"
+coverage_floor = 100
 arithmetic_sites = 5
 harnesses = ["money::proofs::every_valid_fee_schedule_conserves_the_round"]
 notes = """
@@ -51,6 +65,7 @@ arithmetic breaks."""
 
 [modules."chain/merkle"]
 method = "exhaustive"
+coverage_floor = 95
 arithmetic_sites = 2
 harnesses = [
   "chain::merkle::every_tree_size_up_to_sixty_four_proves_exactly_its_own_claims",
@@ -66,6 +81,7 @@ it silently would invalidate every round already deposited."""
 
 [modules.payout]
 method = "property"
+coverage_floor = 100
 arithmetic_sites = 13
 harnesses = [
   "payout::proofs::plans_always_balance_and_verify",
@@ -81,6 +97,7 @@ that product is not a finite domain worth enumerating. Sampled instead."""
 
 [modules.attribution]
 method = "property"
+coverage_floor = 95
 arithmetic_sites = 6
 harnesses = [
   "adversarial::attribution_survives_hostile_commit_metadata",
@@ -93,6 +110,7 @@ module that decides who is owed what look arithmetic-free."""
 
 [modules."chain/wallet"]
 method = "property"
+coverage_floor = 95
 arithmetic_sites = 0
 harnesses = [
   "adversarial::an_address_is_accepted_exactly_when_it_decodes_to_thirty_two_bytes",
@@ -113,6 +131,7 @@ are validated\" cannot be read as more than it is."""
 
 [modules."storage/ledger"]
 method = "property"
+coverage_floor = 90
 arithmetic_sites = 7
 harnesses = ["storage::ledger::lifetime_paid_is_the_sum_of_the_settlements_that_were_not_simulated"]
 notes = """
@@ -123,6 +142,7 @@ The only place outside `payout` that accumulates rather than carries: \
 
 [modules."chain/vault"]
 method = "tests"
+coverage_floor = 95
 arithmetic_sites = 5
 notes = """
 The rules a deployed vault enforces, and the one part of this system that \
@@ -134,6 +154,7 @@ specification, and a test asserts no two refusals share a sentence."""
 
 [modules."chain/vault/round"]
 method = "tests"
+coverage_floor = 95
 arithmetic_sites = 1
 notes = "The round record. Its invariant is exercised through chain/vault."
 
@@ -144,11 +165,13 @@ notes = "Builds Addresses from a file, so not exempt. Unit tests and tests/cli.r
 
 [modules."attribution/identity"]
 method = "tests"
+coverage_floor = 95
 arithmetic_sites = 0
 notes = "Maps git emails to Addresses."
 
 [modules."storage/objects"]
 method = "tests"
+coverage_floor = 90
 arithmetic_sites = 0
 notes = """
 No arithmetic, but an id here becomes a filesystem path. The unit tests \
@@ -194,6 +217,7 @@ notes = "Parses the address a user types, and warns on a weak checksum."
 
 [modules.lifecycle]
 method = "property"
+coverage_floor = 95
 arithmetic_sites = 10
 harnesses = [
   "lifecycle::proofs::every_valid_schedule_conserves_the_revenue",
@@ -216,6 +240,7 @@ rather than by promise."""
 
 [modules."lifecycle/roles"]
 method = "property"
+coverage_floor = 95
 arithmetic_sites = 3
 harnesses = [
   "lifecycle::proofs::every_role_distribution_conserves_the_pool",

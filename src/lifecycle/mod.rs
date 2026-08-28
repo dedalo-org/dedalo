@@ -404,4 +404,28 @@ mod tests {
         assert_eq!(split.roles, amount(1_000));
         assert_eq!(split.contributors, amount(3_000));
     }
+
+    /// Every stage can say what it is, and says something different.
+    ///
+    /// These strings are what a maintainer reads to find out what their
+    /// project is currently allowed to do. Two stages describing themselves
+    /// identically would be a silent copy-paste, which is exactly the kind of
+    /// thing a test catches and a reviewer does not.
+    #[test]
+    fn every_stage_describes_itself_and_no_two_agree() {
+        let stages = [Stage::Raising, Stage::Staked, Stage::Tokenised];
+        let descriptions: Vec<&str> = stages.iter().map(|s| s.description()).collect();
+
+        for (stage, description) in stages.iter().zip(&descriptions) {
+            assert!(
+                !description.is_empty(),
+                "{stage:?} describes itself as nothing"
+            );
+        }
+
+        let mut unique = descriptions.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), stages.len(), "two stages share a description");
+    }
 }

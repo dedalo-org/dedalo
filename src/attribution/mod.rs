@@ -356,4 +356,74 @@ mod tests {
         assert_eq!(sum, 100 * MILLI);
         assert_eq!(attribution.total_score, 100 * MILLI);
     }
+
+    /// `credit_merger` pays whoever pressed the button, on top of the authors.
+    ///
+    /// It is off by default and it is a rule about who gets money, so it needs
+    /// a test that says what turning it on does — and it had none. The merger
+    /// earns the *whole* merge score again rather than a share of it, which is
+    /// the surprising part and the reason to write it down.
+    #[test]
+    fn crediting_the_merger_pays_them_on_top_of_the_authors() {
+        let mut policy = AttributionPolicy {
+            credit_merger: true,
+            ..AttributionPolicy::default()
+        };
+        policy.base_points = 100;
+        policy.points_per_insertion = 0.0;
+        policy.points_per_deletion = 0.0;
+
+        let commits = vec![commit("ada@x.io", &[])];
+        let mut event = merge(commits, 0);
+        event.merged_by = Author::new("Maintainer", "maint@x.io");
+
+        let attribution = Attribution::compute(&[event.clone()], &policy);
+        let score_of = |email: &str| {
+            attribution
+                .contributions
+                .iter()
+                .find(|c| c.author.email == email)
+                .unwrap_or_else(|| panic!("{email} earned nothing"))
+                .score
+        };
+
+        assert_eq!(score_of("ada@x.io"), 100 * MILLI);
+        assert_eq!(score_of("maint@x.io"), 100 * MILLI);
+        assert_eq!(attribution.total_score, 200 * MILLI);
+
+        // Off by default, and off means off: the same merge pays the author
+        // alone.
+        let policy = AttributionPolicy {
+            credit_merger: false,
+            ..policy
+        };
+        let attribution = Attribution::compute(&[event], &policy);
+        assert_eq!(attribution.contributions.len(), 1);
+        assert_eq!(attribution.total_score, 100 * MILLI);
+    }
+
+    /// An empty round divides by nothing and says zero rather than panicking.
+    ///
+    /// `weights()` is what `split_by_weights` is handed, so its ordering is
+    /// load-bearing: the share a contributor is paid is the weight at their
+    /// index. Nothing checked that the two orders are the same one.
+    #[test]
+    fn weights_follow_contributor_order_and_an_empty_round_is_zero_share() {
+        let policy = AttributionPolicy::default();
+        let commits = vec![commit("ada@x.io", &[]), commit("bea@x.io", &[])];
+        let attribution = Attribution::compute(&[merge(commits, 0)], &policy);
+
+        let weights = attribution.weights();
+        assert_eq!(weights.len(), attribution.contributions.len());
+        for (contribution, weight) in attribution.contributions.iter().zip(&weights) {
+            assert_eq!(contribution.score, *weight, "weights are out of order");
+        }
+
+        let empty = Attribution::default();
+        assert!(empty.is_empty());
+        assert!(empty.weights().is_empty());
+        // The one input that cannot be divided by.
+        let contribution = &attribution.contributions[0];
+        assert_eq!(empty.share_bps(contribution), 0);
+    }
 }

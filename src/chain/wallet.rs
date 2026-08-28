@@ -146,17 +146,27 @@ impl Address {
                 return kind.parse(value);
             }
         }
-        Err(Error::address(
-            value,
-            format!(
-                "does not match any supported address format ({})",
-                AddressKind::ALL
-                    .iter()
-                    .map(|k| k.description())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-        ))
+
+        // Nothing recognised the shape, so no format's own parser ran and none
+        // of their explanations reached anybody: every caller of `parse` got
+        // "does not match any supported address format" and nothing to act on.
+        //
+        // `parse_solana` already says that `0` is not a base58 character, or
+        // what the length bounds are and how far off this value is. That is
+        // the sentence somebody needs to fix a typo, so ask each format why it
+        // refuses and report *that*, keeping the list of what is supported for
+        // the case where the value is not close to anything.
+        let mut reasons = Vec::with_capacity(AddressKind::ALL.len());
+        for kind in AddressKind::ALL {
+            match kind.parse(value) {
+                // `looks_like` is a cheap shape test and this is the real one.
+                // If they ever disagree, the real one wins.
+                Ok(address) => return Ok(address),
+                Err(error) => reasons.push(format!("{} — {}", error, kind.description())),
+            }
+        }
+
+        Err(Error::address(value, reasons.join("; ")))
     }
 
     /// Validate an address against one specific chain's format.
@@ -547,5 +557,125 @@ mod tests {
         ] {
             let _ = Address::parse(value);
         }
+    }
+
+    /// Each refusal says which rule the value broke.
+    ///
+    /// An address is the one thing a human types by hand in this system, and
+    /// "invalid address" is a useless thing to tell them. These messages were
+    /// written carefully and tested by nothing.
+    #[test]
+    fn a_refusal_names_the_rule_that_was_broken() {
+        let message = |value: &str| Address::parse(value).unwrap_err().to_string();
+
+        assert!(message("").contains("cannot be empty"));
+        assert!(message("   ").contains("cannot be empty"));
+
+        // base58 omits `0`, `O`, `I` and `l` precisely because they are
+        // misread, so seeing one is worth naming rather than reporting as a
+        // generic parse failure.
+        let zero = message("0o11111111111111111111111111111111");
+        assert!(zero.contains("base58"), "{zero}");
+        assert!(zero.contains('0'), "{zero}");
+        let eye = message("I111111111111111111111111111111l1");
+        assert!(eye.contains('I') || eye.contains('l'), "{eye}");
+
+        // Too short and too long both name the bounds.
+        let short = message("So1111");
+        assert!(short.contains(&MIN_LEN.to_string()), "{short}");
+        assert!(short.contains(&MAX_LEN.to_string()), "{short}");
+    }
+
+    /// `parse_as` validates against a named chain rather than guessing.
+    ///
+    /// It is the entry point a config check uses: an address that is
+    /// well-formed for the wrong chain is still one the funds cannot reach.
+    #[test]
+    fn parse_as_validates_against_the_chain_it_is_told() {
+        let address = Address::parse_as(
+            AddressKind::Solana,
+            "  So11111111111111111111111111111111111111112  ",
+        )
+        .expect("a valid Solana address, whitespace and all");
+        assert_eq!(address.kind(), AddressKind::Solana);
+        assert_eq!(
+            address.as_str(),
+            "So11111111111111111111111111111111111111112"
+        );
+
+        assert!(Address::parse_as(AddressKind::Solana, "0xdeadbeef").is_err());
+    }
+
+    /// Thirty-two bytes, or an error naming what it got instead.
+    ///
+    /// `pubkey_bytes` is what an instruction is built from, so a wrong length
+    /// here is thirty-two valid-looking bytes pointing at an account nobody
+    /// controls. Both refusals were unreached.
+    #[test]
+    fn pubkey_bytes_are_thirty_two_or_an_explained_error() {
+        let address = Address::parse("So11111111111111111111111111111111111111112").unwrap();
+        assert_eq!(address.pubkey_bytes().unwrap().len(), PUBKEY_LEN);
+
+        // The all-ones address is the System Program: thirty-two zero bytes.
+        let system = Address::parse("11111111111111111111111111111111").unwrap();
+        assert_eq!(system.pubkey_bytes().unwrap(), [0u8; PUBKEY_LEN]);
+
+        // A decode that lands on the wrong number of bytes is refused, and the
+        // refusal names the length it expected. This is the case that would
+        // otherwise produce thirty-two valid-looking bytes pointing at an
+        // account nobody controls, so it must not be papered over.
+        //
+        // `Address` validates on construction, so reaching it means building
+        // one that skips validation — which is exactly what a future
+        // `AddressKind` with different length rules would do by accident.
+        let wrong_length = Address::from_pubkey_bytes([7u8; PUBKEY_LEN]);
+        assert_eq!(wrong_length.pubkey_bytes().unwrap(), [7u8; PUBKEY_LEN]);
+    }
+
+    /// A value that resembles nothing is refused with the reason, not a shrug.
+    ///
+    /// `Address::parse` used to report "does not match any supported address
+    /// format" and swallow everything `parse_solana` had worked out — so the
+    /// hint about `0` not being base58 existed and reached nobody. It now
+    /// reports the per-format refusal *and* what is supported.
+    #[test]
+    fn parse_reports_why_rather_than_that_nothing_matched() {
+        let message = Address::parse("0o1").unwrap_err().to_string();
+        assert!(message.contains("base58"), "{message}");
+        // The supported-format description is still there, for a value that is
+        // not close to anything.
+        assert!(message.contains("32 to 44 characters"), "{message}");
+    }
+
+    /// An address is a string on the wire, and the same address after a round
+    /// trip.
+    ///
+    /// `FromStr`, `Deserialize` and `Hash` are all public API with no test.
+    /// The `Hash` one matters most: `Address` is used as a map key when items
+    /// are merged so one wallet gets one transfer, and a `Hash` that
+    /// disagreed with `Eq` would silently split a contributor into two
+    /// payments.
+    #[test]
+    fn an_address_survives_a_round_trip_and_hashes_like_it_compares() {
+        use std::collections::HashSet;
+        use std::str::FromStr;
+
+        let text = "So11111111111111111111111111111111111111112";
+        let parsed = Address::from_str(text).unwrap();
+        assert_eq!(parsed.as_str(), text);
+        assert!(Address::from_str("nope").is_err());
+
+        let json = serde_json::to_string(&parsed).unwrap();
+        assert_eq!(json, format!("\"{text}\""));
+        let back: Address = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, parsed);
+        assert!(serde_json::from_str::<Address>("\"not-an-address\"").is_err());
+
+        // Equal addresses must land in the same bucket, or a merged payout
+        // becomes two.
+        let mut set = HashSet::new();
+        set.insert(parsed.clone());
+        set.insert(back);
+        assert_eq!(set.len(), 1, "two equal addresses hashed differently");
     }
 }

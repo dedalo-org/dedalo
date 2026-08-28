@@ -159,4 +159,68 @@ mod tests {
         assert_eq!(map.iter().count(), 1);
         assert_eq!(map.find_handle("ada").unwrap().emails.len(), 2);
     }
+
+    /// Relinking the same handle to a *different* wallet moves the money.
+    ///
+    /// This is the branch nothing reached, and it is the one that matters:
+    /// `identity link` on an existing handle silently repoints where that
+    /// person is paid. It has to actually change the wallet, and it has to
+    /// report that it changed something, because the caller decides whether to
+    /// write the config back.
+    #[test]
+    fn relinking_a_handle_repoints_the_wallet() {
+        let first = Address::parse("So11111111111111111111111111111111111111112").unwrap();
+        let second = Address::parse("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA").unwrap();
+
+        let mut map = IdentityMap::default();
+        assert!(map.link("ada", first.clone(), "ada@example.com"));
+        assert_eq!(
+            map.find_handle("ada").unwrap().wallet.as_ref(),
+            Some(&first)
+        );
+
+        assert!(
+            map.link("ada", second.clone(), "ada@example.com"),
+            "changing the wallet is a change"
+        );
+        assert_eq!(
+            map.find_handle("ada").unwrap().wallet.as_ref(),
+            Some(&second)
+        );
+        // One identity still, not two.
+        assert_eq!(map.iter().count(), 1);
+    }
+
+    /// `parse` refuses a wallet that is not one, rather than storing a string.
+    #[test]
+    fn an_identity_cannot_be_built_from_a_wallet_that_is_not_one() {
+        assert!(Identity::parse("ada", "not-an-address").is_err());
+        assert!(Identity::parse("ada", "").is_err());
+        assert!(Identity::parse("ada", "So11111111111111111111111111111111111111112").is_ok());
+    }
+
+    /// The email index is keyed case-insensitively and trimmed.
+    ///
+    /// `by_email` is what a caller uses to answer "who is this commit author",
+    /// and git emails arrive with whatever whitespace and capitalisation the
+    /// committer's config had. A lookup that missed on `Ada@Example.com` would
+    /// leave a linked contributor unpaid.
+    #[test]
+    fn the_email_index_ignores_case_and_whitespace() {
+        let wallet = Address::parse("So11111111111111111111111111111111111111112").unwrap();
+        let map = IdentityMap::new(vec![
+            Identity::new("ada", wallet.clone())
+                .with_email("  Ada@Example.COM ")
+                .with_email("ada@work.io"),
+        ]);
+
+        assert!(!map.is_empty());
+        let index = map.by_email();
+        assert_eq!(index.len(), 2);
+        assert_eq!(index.get("ada@example.com").unwrap().handle, "ada");
+        assert_eq!(index.get("ada@work.io").unwrap().handle, "ada");
+
+        assert!(IdentityMap::default().is_empty());
+        assert!(IdentityMap::default().by_email().is_empty());
+    }
 }
