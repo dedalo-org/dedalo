@@ -92,9 +92,22 @@ predicates = "3"
 proptest = "1"
 tempfile = "3"
 
+# docs.rs builds the API reference, per released version, in a sandbox with no
+# network and a time limit. Rehearse a change here with `cargo docs-rs`, which
+# builds the same way it does — a crate that builds locally can still fail
+# there, and when it does the crate page shows a build failure to everyone who
+# follows the link from the README.
 [package.metadata.docs.rs]
+# `cli` and `testing` both gate public items, and a reference that omits them
+# is a reference to a crate nobody has. `--cfg docsrs` is what makes each one
+# say which feature it needs; see the `doc_cfg` attribute in src/lib.rs.
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+# One target, not five. Nothing public varies by platform — the only `cfg(unix)`
+# in the crate is a private signal handler — so building the other four costs
+# docs.rs time for an identical page, and a timeout there is a failed build
+# page rather than a slow one.
+targets = ["x86_64-unknown-linux-gnu"]
 
 # `cargo binstall dedalo` fetches the release archive instead of compiling.
 # The layout below must match what .github/workflows/release.yml publishes.
