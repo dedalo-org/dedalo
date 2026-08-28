@@ -29,6 +29,81 @@ A change to `Amount::split_by_weights`, `PayoutPlan::compute_id`, or the fee
 split is a breaking change even if it compiles, because it changes what people
 receive. Say so in the pull request body with `BREAKING CHANGE:`.
 
+## The minimum supported Rust version
+
+The MSRV is **1.90.0**. It is enforced rather than documented: CI's `msrv` job
+and `ws-check` both build with exactly the compiler `rust-version` names, so it
+cannot drift upward by accident.
+
+What was missing was the policy — under what circumstances the floor moves, and
+what a consumer pinned to an older compiler can expect.
+
+### Raising it is a minor bump
+
+Pre-1.0, an MSRV bump is a **minor** version bump. After 1.0 it becomes a
+**major** one.
+
+That is stricter than treating it as a patch, and it is the honest reading: a
+consumer who cannot build the new version has had something taken away, and the
+version number should say so.
+
+It is also less dramatic than it used to be. **Cargo respects `rust-version`
+during resolution**, so a consumer on an older toolchain resolves to the newest
+version their compiler can build rather than getting a wall of type errors.
+A bump narrows what is available to them; it does not break their build.
+
+### How far back the floor stays
+
+**The current stable release, minus two.** When Rust ships 1.93, the floor may
+move to 1.91 and no further.
+
+Two alternatives were considered and rejected:
+
+- **"Whatever Debian stable ships"** — defensible, and it makes the floor a
+  function of somebody else's freeze schedule. Debian stable can be two years
+  behind, which in practice means never raising the MSRV, including for a
+  security fix.
+- **"Latest stable"** — no floor at all, which makes `rust-version` decoration.
+
+N−2 is roughly a four-month window. It is short enough that a security fix is
+reachable and long enough that a distribution's toolchain is usually inside it.
+
+### What justifies a bump
+
+In descending order of strength:
+
+1. **A security fix that is unavailable otherwise.** This is what happened: the
+   fix for RUSTSEC-2026-0220 in `ruint` needs 1.90, `alloy-sol-types` needs
+   `ruint`, and the alternative was shipping a known-vulnerable big-integer
+   library **in a payments tool**. That is not a close call.
+2. **A language or library feature that removes a real hazard** — something
+   that lets unsafe code, a hand-rolled invariant, or a panic path be deleted.
+   Convenience is not this.
+3. **A dependency that merely prefers a newer compiler.** This is *not*
+   sufficient on its own. Pin the dependency back and revisit; a transitive
+   crate's taste is not a reason to narrow who can build a payout tool.
+
+The difference between (1) and (3) is the whole point of writing this down, so
+that the next bump is argued rather than absorbed.
+
+### Three places move together
+
+An MSRV bump touches **three** files, and the gate only catches two of them:
+
+| File | What reads it |
+| --- | --- |
+| `Cargo.toml` — `rust-version` | cargo resolution, CI's `msrv` job, docs.rs |
+| `rust-toolchain.toml` — `channel` | rustup, on entry to the repository |
+| the workspace flake's Rust pin | `nix develop`, and therefore `ws-check` |
+
+`ws-check` fails if the flake's pin and `Cargo.toml`'s `rust-version` disagree.
+Nothing checks `rust-toolchain.toml` against either, because it names the
+*development* toolchain rather than the floor — those are allowed to differ, and
+usually do. Change it anyway, or contributors build with a compiler CI does not
+use.
+
+A bump gets a changelog entry saying which of the three reasons above applies.
+
 ## Branching
 
 - `main` is always releasable. Every change lands through a pull request.

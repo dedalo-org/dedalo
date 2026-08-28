@@ -17,6 +17,16 @@ ABI encoder became `alloy-sol-types` — the fix for RUSTSEC-2026-0220 in `ruint
 needs 1.90, and the alternative was shipping a known-vulnerable big-integer
 library in a payments tool.
 
+That is the strongest reason there is to raise a floor, and it is not the only
+kind of reason people try. The [policy][msrv] says which ones count: raising the
+MSRV is a minor bump pre-1.0, the floor stays at the current stable minus two,
+and a dependency that merely *prefers* a newer compiler is not sufficient on its
+own. Three files move together when it changes — `Cargo.toml`,
+`rust-toolchain.toml` and the workspace flake — and the gate catches two of
+them.
+
+[msrv]: https://github.com/dedalo-org/dedalo/blob/main/RELEASING.md#the-minimum-supported-rust-version
+
 ## The loop
 
 ```bash
