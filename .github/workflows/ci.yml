@@ -295,13 +295,157 @@ jobs:
       # missing, and `verification.toml` keeps an empty [contracts] table so a
       # program cannot reappear without someone declaring how it is measured.
 
+  handbook:
+    timeout-minutes: 20
+    name: handbook
+    runs-on: ubuntu-latest
+    env:
+      # Kept in step with docs.yml by hand. They build the same book; if they
+      # ever build it with different mdBook versions, this job stops being
+      # evidence about what will be published.
+      MDBOOK_VERSION: "0.5.4"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: stable
+
+      # `cargo install mdbook` is a few minutes of compile, which is more than
+      # this job is worth on every pull request. Caching the built binary by
+      # version makes it seconds after the first run. The cache is not going
+      # near a released artifact, so the rule that publishing builds restore no
+      # caches does not apply here.
+      #
+      # docs.yml builds mdBook from source rather than pulling it from a
+      # third-party action, on the grounds that a pinned version built
+      # `--locked` is a smaller trust assumption than an action that can be
+      # repointed. Same reasoning, same method.
+      - name: Cache mdBook
+        id: mdbook-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cargo/bin/mdbook
+          key: mdbook-${{ runner.os }}-${{ env.MDBOOK_VERSION }}
+      - name: Install mdBook
+        if: steps.mdbook-cache.outputs.cache-hit != 'true'
+        env:
+          VERSION: ${{ env.MDBOOK_VERSION }}
+        run: cargo install mdbook --locked --version "$VERSION"
+
+      - name: Build the handbook
+        run: mdbook build book
+
+      # The checkers resolve links against the *rendered* tree, which is
+      # exactly the class of breakage a reviewer cannot see in a diff: a
+      # renamed heading breaks every `#anchor` pointing at it, and mdBook
+      # renders a broken link exactly as happily as a working one.
+      - name: Check every link and anchor
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp -r target/book/. _site/
+          cp -r site/. _site/
+          python3 scripts/check-book.py --src book/src --built _site
+          python3 scripts/check-site.py --root site --built _site \
+            --external-prefix /dedalo/
+
+  self:
+    env:
+      # Outranks rust-toolchain.toml, which would otherwise win.
+      RUSTUP_TOOLCHAIN: stable
+    timeout-minutes: 25
+    name: dedalo on dedalo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Attribution reads merge history; a shallow clone hides it.
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - run: cargo build --release --locked -p dedalo
+
+      # Three things this catches that nothing else does:
+      #
+      #   1. A ledger that stopped verifying — an object not committed, or
+      #      edited, or a change to the hashing that broke every recorded id.
+      #      The last is the interesting one: the unit tests build their own
+      #      ledgers, so they would all still pass.
+      #   2. A dedalo.toml that stopped parsing. Unknown keys are rejected, so
+      #      renaming a config key breaks this file — and this file is the
+      #      example everybody copies.
+      #   3. A plan that stops balancing on real history rather than on
+      #      generated history.
+      - name: The project's own ledger verifies
+        run: ./target/release/dedalo verify
+
+      # Read-only, deliberately: no --save, so nothing is written to .dedalo/,
+      # and no --execute. The amount is arbitrary and the round is never
+      # settled. This is a check that the project's own record is sound, not a
+      # round.
+      - name: A plan over this repository's real history balances
+        run: |
+          set -euo pipefail
+          ./target/release/dedalo plan --amount 1000 --json > plan.json
+          python3 - <<'CHECK'
+          import json, sys
+
+          plan = json.load(open("plan.json"))
+
+          # Amounts are decimal strings because JSON numbers are doubles and
+          # lose precision above 2^53. Parsing them with anything that goes
+          # through a float would make this check quietly wrong at exactly the
+          # amounts it exists to protect, so: int(), which is exact.
+          items = sum(int(i["amount"]) for i in plan["items"])
+          undistributed = int(plan["undistributed"])
+          gross = int(plan["split"]["gross"])
+
+          if items + undistributed != gross:
+              sys.exit(
+                  f"plan does not balance: items {items} + undistributed "
+                  f"{undistributed} != gross {gross}"
+              )
+
+          split = plan["split"]
+          parts = (
+              int(split["protocol"])
+              + int(split["treasury"])
+              + int(split["contributors"])
+          )
+          if parts != gross:
+              sys.exit(f"fee split does not conserve the round: {parts} != {gross}")
+
+          print(f"balanced: {len(plan['items'])} items over {plan['range']['merges']} merges")
+          CHECK
+
+      # action.yml reads `id` and `gross` out of this JSON with grep, not with
+      # a parser. Renaming either field breaks the Action silently in every
+      # repository that uses it, so assert on the exact shape the Action reads
+      # rather than on a shape a parser would tolerate.
+      - name: The Action can still find what it parses
+        run: |
+          set -euo pipefail
+          for field in '"id": *"[^"]*"' '"gross": *"[^"]*"'; do
+            if ! grep -qo "$field" plan.json; then
+              echo "::error title=Action contract::plan --json no longer matches $field"
+              exit 1
+            fi
+          done
+          echo "the Action's two extractions still match"
+
   # A single gate for branch protection, so adding a job above does not
   # require reconfiguring the repository.
   ci-ok:
     timeout-minutes: 5
     name: CI
     if: always()
-    needs: [lint, test, msrv, docs, coverage, packaging, semver, verification]
+    needs:
+      [lint, test, msrv, docs, coverage, packaging, semver, verification, handbook, self]
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any job failed
