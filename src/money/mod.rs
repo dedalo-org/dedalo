@@ -111,6 +111,13 @@ impl Amount {
             Some((i, f)) => (i, f),
             None => (raw.as_str(), ""),
         };
+        // `.5` means what it looks like, so an empty integer part is allowed —
+        // but only when there are digits after the point. Without this, `"."`
+        // splits into two empty halves, the digit checks below pass
+        // vacuously, and a string containing no digit at all parses as zero.
+        if int_part.is_empty() && frac_part.is_empty() {
+            return Err(err());
+        }
         let int_part = if int_part.is_empty() { "0" } else { int_part };
         if !int_part.bytes().all(|b| b.is_ascii_digit())
             || !frac_part.bytes().all(|b| b.is_ascii_digit())
@@ -261,5 +268,87 @@ mod tests {
     fn basis_points_round_down() {
         let amount = Amount::from_base_units(10_001);
         assert_eq!(amount.bps(500).unwrap().base_units(), 500);
+    }
+
+    /// `.5` is a number people type, and it means what it looks like.
+    ///
+    /// The empty integer part has its own branch, and nothing reached it.
+    #[test]
+    fn an_amount_may_omit_the_leading_zero() {
+        assert_eq!(Amount::parse(".5", 6).unwrap().base_units(), 500_000);
+        assert_eq!(Amount::parse(".000001", 6).unwrap().base_units(), 1);
+        // Still not a licence to omit everything.
+        assert!(Amount::parse(".", 6).is_err());
+        assert!(Amount::parse("", 6).is_err());
+    }
+
+    /// An amount larger than `u128` is refused, not wrapped.
+    ///
+    /// Every balance in the system is a `u128` of base units. A decimal string
+    /// that does not fit has to fail at the boundary, because the alternative
+    /// is a number that is silently not the one somebody typed.
+    #[test]
+    fn an_amount_that_does_not_fit_is_refused() {
+        let too_big = "1".repeat(40);
+        assert!(Amount::parse(&too_big, 6).is_err());
+        // u128::MAX has 39 digits; one more than that with no decimals is out.
+        assert!(Amount::parse("340282366920938463463374607431768211456", 0).is_err());
+        // And the largest that does fit still parses.
+        assert!(Amount::parse("340282366920938463463374607431768211455", 0).is_ok());
+    }
+
+    /// A weight big enough to overflow the intermediate product is an error,
+    /// not a wrapped share.
+    ///
+    /// `split_by_weights` multiplies the total by each weight before dividing.
+    /// That product is where an overflow would happen, and an overflow here
+    /// would hand somebody an arbitrary amount — the single worst failure this
+    /// function has. Nothing reached the branch that refuses it.
+    #[test]
+    fn a_weight_that_would_overflow_the_split_is_refused() {
+        let everything = Amount::from_base_units(u128::MAX);
+        let error = everything.split_by_weights(&[2, 1]).unwrap_err();
+        assert!(
+            matches!(error, Error::Overflow("weighted share")),
+            "expected an overflow refusal, got {error:?}"
+        );
+
+        // The sum of the weights is where the other overflow lives.
+        let error = everything
+            .split_by_weights(&[u128::MAX, u128::MAX])
+            .unwrap_err();
+        assert!(
+            matches!(error, Error::Overflow("weight sum")),
+            "expected an overflow refusal, got {error:?}"
+        );
+
+        // A weight of one is the largest that cannot overflow, and works.
+        let shares = everything.split_by_weights(&[1]).unwrap();
+        assert_eq!(shares[0].base_units(), u128::MAX);
+    }
+
+    /// An amount serialises as a string and deserialises from either.
+    ///
+    /// Amounts are written as decimal strings because JSON numbers are doubles
+    /// and lose precision above 2^53. Reading a bare number anyway is a
+    /// deliberate leniency for hand-written config, and it had no test — so
+    /// nothing said whether the lenient path produced the same value as the
+    /// strict one.
+    #[test]
+    fn an_amount_round_trips_as_a_string_and_reads_a_number_too() {
+        let amount = Amount::from_base_units(9_007_199_254_740_993);
+
+        let json = serde_json::to_string(&amount).unwrap();
+        assert_eq!(json, "\"9007199254740993\"", "amounts serialise as strings");
+        assert_eq!(serde_json::from_str::<Amount>(&json).unwrap(), amount);
+
+        // The lenient path: a JSON number, which is what somebody writes by
+        // hand. Small enough to survive a double, which is the only reason it
+        // is accepted at all.
+        let from_number: Amount = serde_json::from_str("1000000").unwrap();
+        assert_eq!(from_number.base_units(), 1_000_000);
+
+        // Not a number, not a string of digits: refused rather than defaulted.
+        assert!(serde_json::from_str::<Amount>("\"twelve\"").is_err());
     }
 }

@@ -60,6 +60,70 @@ So a new module cannot be merged without someone deciding what verifies it, and
 an exemption cannot quietly stop being true. Adding a multiplication to the
 money path is a build failure until it is acknowledged.
 
+## Coverage floors, per module
+
+Coverage used to be measured and never enforced: a number somebody could look
+at. A metric with no threshold does not hold anything down, which on this
+project is worse than not measuring at all.
+
+Each module declares a floor in `verification.toml`, beside how it is verified,
+and `scripts/check-coverage.py` fails CI below it:
+
+| Module | Floor | Why |
+| --- | ---: | --- |
+| `money`, `money::treasury`, `payout` | **100%** | They decide amounts. A line no test reaches is a line the proofs do not cover, and that is a finding. |
+| `attribution`, `attribution::identity`, `chain::wallet`, `chain::merkle`, `chain::vault`, `lifecycle` | 95% | They decide who is paid and how much. |
+| `storage::ledger`, `storage::objects` | 90% | The record everything else is checked against. |
+| `cli`, `git` | none | Covered by `tests/cli.rs` and by end-to-end tests against real repositories. A line-coverage floor here would reward mocking. |
+
+Three things about how it is measured:
+
+**It is per module, not one number.** A single global percentage would be
+satisfied by testing the CLI's table renderer and would say nothing about
+`money`, and chasing it upward produces tests written for the number rather
+than for the behaviour.
+
+**It measures the code, not the tests.** Lines inside a `#[cfg(test)] mod
+tests` are excluded. Counting them makes the figure meaningless in both
+directions — `chain::merkle`'s exhaustive proof is `#[ignore]`d for runtime, so
+its body alone read as thirty uncovered lines while being the strongest
+verification in the file.
+
+**The floors are met by the ordinary suite**, without the `#[ignore]`d
+exhaustive proofs. That is a stronger statement than it sounds: 100% on the
+money modules means every line is reached by a test that runs on every pull
+request.
+
+### What running it the first time found
+
+Setting the money modules to 100% was a claim, and it was false. Six things:
+
+- **`Amount::parse(".")` returned zero.** A string with no digit in it was
+  accepted as an amount, because the empty integer part and the empty
+  fractional part each passed their check separately. Now refused.
+- **`Address::parse` discarded every explanation it had.** `parse_solana`
+  works out that `0` is not a base58 character, or how far off the length is —
+  and `parse` replaced all of it with "does not match any supported address
+  format". Every caller got a message they could not act on. It now reports the
+  reason *and* what is supported.
+- **Two of the three `UnresolvedReason` variants were constructed by no test.**
+  "Nobody is silently dropped" is an invariant with three shapes — an ignored
+  email, an excluded identity, a contributor with no wallet — and only the
+  third was checked. Reporting a bot as "no wallet" sends somebody chasing the
+  wrong problem.
+- **`split_by_weights` had no test for the overflow it refuses**, which is the
+  single worst failure that function has: a wrapped product would hand somebody
+  an arbitrary amount.
+- **`credit_merger` had no test**, despite being a rule about who gets money.
+  It pays the merger the *whole* merge score again rather than a share, which
+  is worth knowing before turning it on.
+- **`Address`'s `Hash` impl was untested**, and it is used as a map key when
+  items are merged so one wallet gets one transfer. A `Hash` disagreeing with
+  `Eq` would split a contributor into two payments.
+
+None of those was found by reading the code. That is the argument for the
+gate.
+
 ## The layers of the test suite
 
 | Layer | What it holds down |

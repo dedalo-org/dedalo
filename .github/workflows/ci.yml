@@ -158,6 +158,37 @@ jobs:
         run: cargo llvm-cov --locked --workspace --all-features --lcov --output-path lcov.info
       - name: Summarise
         run: cargo llvm-cov report --summary-only >> "$GITHUB_STEP_SUMMARY"
+
+      # Coverage used to be measured and never enforced: a number somebody
+      # could look at, on a project whose README argues at length about the
+      # difference between proved, property-tested and merely tested. A metric
+      # with no threshold does not hold anything down.
+      #
+      # The floors are per module and declared in verification.toml, not here.
+      # A single global percentage would be satisfied by testing the CLI's
+      # table renderer and would say nothing about `money`.
+      - name: Every module meets the floor it declares
+        run: |
+          set -uo pipefail
+          cargo llvm-cov report --json --output-path coverage.json
+
+          # Run once. Running it twice — once for the summary, once for the
+          # exit code — would report a different number than it failed on if
+          # anything about the run were not deterministic.
+          set +e
+          python3 scripts/check-coverage.py --coverage coverage.json \
+            > "$RUNNER_TEMP/coverage.txt" 2>&1
+          status=$?
+          set -e
+
+          cat "$RUNNER_TEMP/coverage.txt"
+          {
+            echo '### Coverage floors'
+            echo '```'
+            cat "$RUNNER_TEMP/coverage.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-lcov

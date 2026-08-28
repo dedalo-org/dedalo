@@ -43,6 +43,14 @@ struct Entry {
     /// match, so the statement is re-examined whenever the code moves.
     #[serde(default)]
     arithmetic_is_not_money: Option<String>,
+    /// Percentage of lines in this module that tests must reach.
+    ///
+    /// Enforced by `scripts/check-coverage.py` against `cargo llvm-cov`, not
+    /// here — this file has no coverage data. What is checked here is that the
+    /// declaration is coherent, so a floor cannot be nonsense or attached to
+    /// something that has no lines of its own.
+    #[serde(default)]
+    coverage_floor: Option<u8>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -232,6 +240,46 @@ fn every_module_is_accounted_for() {
         stale.is_empty(),
         "verification.toml names modules that no longer exist: {stale:?}"
     );
+}
+
+/// A declared floor has to be a percentage, and has to be on something that
+/// can have one.
+///
+/// The floors themselves are checked by `scripts/check-coverage.py`, which
+/// needs a coverage run. This is the half that does not: a `proofs` module is
+/// test code compiled only under `cfg(test)`, so holding it to a line-coverage
+/// floor would be measuring whether the proofs test themselves.
+#[test]
+fn every_coverage_floor_is_a_percentage_of_something_measurable() {
+    let manifest = manifest();
+    for (name, entry) in &manifest.modules {
+        let Some(floor) = entry.coverage_floor else {
+            continue;
+        };
+        assert!(
+            floor <= 100,
+            "{name}: a coverage floor of {floor}% is not a percentage"
+        );
+        assert!(
+            entry.method != "proofs",
+            "{name}: a `proofs` module is test code and cannot carry a coverage floor"
+        );
+    }
+
+    // The whole point of the exercise: the modules that decide amounts are
+    // held to something. If this list ever empties, the gate has quietly
+    // stopped gating.
+    for required in ["money", "money/treasury", "payout"] {
+        let entry = manifest
+            .modules
+            .get(required)
+            .unwrap_or_else(|| panic!("{required} is not in the manifest"));
+        assert_eq!(
+            entry.coverage_floor,
+            Some(100),
+            "{required} decides how much money moves and must be held to 100%"
+        );
+    }
 }
 
 #[test]
