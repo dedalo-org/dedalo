@@ -1,0 +1,356 @@
+#!/usr/bin/env python3
+"""Build the example repository the handbook is checked against.
+
+Every example in the documentation is currently an assertion about what *would*
+happen. A reader who runs the commands against their own project gets different
+numbers and no way to tell whether they did it wrong.
+
+This generates `dedalo-org/example`: a small repository with real merge history
+whose output the handbook can quote exactly, and which a reader can clone and
+reproduce.
+
+## Why generated rather than written
+
+A hand-maintained fixture rots. The interesting cases here — a merge that hits
+the per-merge cap, an author with no wallet, a bot the config ignores — are
+exactly the ones somebody would forget to keep working after a format change.
+Regenerating is one command.
+
+## What it contains, and why each piece is there
+
+- **Twelve merges by five authors**, so attribution has something to divide.
+- **A `Co-authored-by:` trailer**, so a merge is split between two people.
+- **One merge far larger than `max_points_per_merge`**, so the cap has
+  something to do. Without it the cap is a setting nobody can see the effect
+  of.
+- **An author with no wallet linked**, so `unresolved` is non-empty in the
+  worked example. That state is the one the tool exists to make visible, and an
+  example that never shows it is an example of the easy case.
+
+  Note that `undistributed` stays **zero** here, and that is correct rather
+  than a gap: an unresolved contributor's weight leaves the split, so the pool
+  still reaches the people who can be paid. `undistributed` is for a pool that
+  reached *nobody*, which needs every contributor to be unresolved — a
+  degenerate round, and not the one to build an example around.
+- **A bot commit excluded by `ignore_emails`**, so the difference between
+  *ignored* and *not linked* is visible.
+- **Two settled rounds in `.dedalo/`**, so `dedalo verify` and `dedalo ledger`
+  have something to print.
+
+    scripts/make-example-repo.py --out /tmp/example
+    scripts/make-example-repo.py --out /tmp/example --dedalo ./target/release/dedalo
+
+Nothing here pushes. Publishing the result is a separate, deliberate step —
+see the README it writes.
+"""
+
+from __future__ import annotations
+
+import argparse
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+# Obvious placeholders. Somebody will find this repository and assume the
+# wallets are real, so they are chosen to be recognisable rather than plausible:
+# these are well-known Solana program addresses, not anybody's account.
+WALLETS = {
+    "ada": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+    "bea": "MerkS3LaQBSvM5JZsvBaLZBBSMvMB5aTuLRHrvKAyDo",
+    "cy": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+}
+SOURCE = "So11111111111111111111111111111111111111112"
+TREASURY = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+COLLECTIVE = "SysvarRent111111111111111111111111111111111"
+
+AUTHORS = {
+    "ada": ("Ada Lovelace", "ada@example.com"),
+    "bea": ("Bea Ramsey", "bea@example.com"),
+    "cy": ("Cy Okonkwo", "cy@example.com"),
+    # Never linked, on purpose: this is the contributor the round cannot pay.
+    "dee": ("Dee Halvorsen", "dee@example.com"),
+    "bot": ("release-bot", "bot@example.com"),
+}
+
+# (branch, author key, inserted lines, subject, co-author key or None)
+#
+# The line counts are what make the example interesting: #7 is an order of
+# magnitude larger than the rest, so it hits `max_points_per_merge` and the
+# handbook can show what the cap does.
+MERGES = [
+    ("feat/tokenizer", "ada", 120, "feat(parser): a streaming tokenizer", None),
+    ("feat/splits", "bea", 90, "feat(money): largest-remainder splits", None),
+    ("fix/rounding", "ada", 20, "fix(money): keep dust with contributors", None),
+    ("feat/ledger", "cy", 140, "feat(storage): a hash-chained ledger", None),
+    ("docs/guide", "dee", 60, "docs: explain what a round is", None),
+    ("feat/wallets", "bea", 75, "feat(wallet): validate addresses on entry", "cy"),
+    # 12,100 points before the cap, 5,000 after it. Chosen to be past the
+    # cap by an unmistakable margin: a merge that only just exceeds it
+    # makes an example nobody can check by eye.
+    ("chore/vendor", "ada", 12000, "chore: vendor the reference vectors", None),
+    ("fix/off-by-one", "cy", 8, "fix(ledger): the head is inclusive", None),
+    ("feat/report", "dee", 110, "feat(cli): a contributors table", None),
+    ("ci/release", "bot", 30, "ci: publish on a tag", None),
+    ("fix/empty-round", "ada", 15, "fix(payout): an empty round is not an error", None),
+    ("docs/faq", "bea", 45, "docs: answer the three questions people ask", "dee"),
+]
+
+CONFIG = f"""\
+# Dedalo — merge-to-earn funding rules for this repository.
+#
+# THIS IS A FIXTURE. Every address below is a well-known Solana program id,
+# chosen so that nobody mistakes it for an account somebody controls. Nothing
+# here has ever held a coin, and nothing here ever will.
+#
+# Generated by scripts/make-example-repo.py in dedalo-org/dedalo.
+
+[project]
+name = "example"
+repository = "https://github.com/dedalo-org/example"
+open_collective = "dedalo"
+
+[git]
+lands_as = "merges"
+branch = "main"
+ignore_subjects = ["chore(release)", "Merge branch"]
+# The bot's commits are excluded deliberately, which is a different state from
+# "has no wallet" — the handbook shows both.
+ignore_emails = ["bot@example.com", "noreply@github.com"]
+
+[attribution]
+base_points = 100
+points_per_insertion = 1.0
+points_per_deletion = 0.5
+# One merge in this history is far bigger than the rest, so the cap has
+# something to do and a reader can see what it does.
+max_points_per_merge = 5000
+credit_merger = false
+split_with_co_authors = true
+
+[asset]
+symbol = "USDC"
+decimals = 6
+chain = "devnet"
+contract = "{WALLETS["ada"]}"
+
+[fees]
+protocol_bps = 250
+treasury_bps = 1500
+
+[wallets]
+source = "{SOURCE}"
+treasury = "{TREASURY}"
+open_collective = "{COLLECTIVE}"
+
+[settlement]
+backend = "dry-run"
+"""
+
+README = """\
+# example
+
+**This is a fixture, not a funded project.** Every wallet address in
+`dedalo.toml` is a well-known Solana program id, chosen so that nobody mistakes
+it for an account somebody controls. No money has ever moved here and none ever
+will.
+
+It exists so the [Dedalo handbook](https://dedalo-org.github.io/dedalo/) can
+show real output instead of asserting what output would look like:
+
+```bash
+git clone https://github.com/dedalo-org/example
+cd example
+dedalo plan --amount 1000
+```
+
+The numbers you get are the numbers the handbook prints. If they differ,
+one of the two is wrong, and that is the point of this repository existing.
+
+## What is in the history, and why
+
+Twelve merges by five authors, arranged so that every state the tool can report
+actually occurs:
+
+| | |
+| --- | --- |
+| `ada`, `bea`, `cy` | linked to wallets, and paid |
+| `dee` | **has no wallet**, so appears in `plan.unresolved` and is paid nothing |
+| `release-bot` | excluded by `ignore_emails`, which is a *different* state from having no wallet |
+| `chore: vendor the reference vectors` | twelve thousand lines — **12,100 points, capped to 5,000** — so the cap has something to do |
+| two merges | carry a `Co-authored-by:` trailer, so the score is split between two people |
+
+**`undistributed` is zero**, and that is correct rather than a gap. An
+unresolved contributor's weight leaves the split, so the pool still reaches the
+people who can be paid — `undistributed` is for a pool that reached *nobody*.
+The unpaid contributor is reported in `unresolved` rather than by money sitting
+still, which is the distinction worth understanding before running a round.
+
+## The cap, which you can check
+
+Ada is at 80% of the round. Without `max_points_per_merge` she would be at
+roughly 95%, because one vendored dependency would have outweighed everything
+anybody else wrote. Set the cap to a large number in `dedalo.toml` and re-run
+`dedalo contributors` to see it.
+
+That is the setting most likely to be wrong in a real project, and its effect
+is invisible in a history where nothing hits it.
+
+## The rounds are dry runs
+
+`.dedalo/` holds two settled rounds, so `dedalo ledger` has something to print.
+`dedalo verify` reports **0 settled plans checked**, and that is right: both
+settlements are dry runs, nothing moved, and `verify` deliberately holds only
+real settlements to their plans. No money has ever moved here.
+
+## Regenerating it
+
+Do not edit this repository by hand. It is generated:
+
+```bash
+# in a clone of dedalo-org/dedalo
+scripts/make-example-repo.py --out /tmp/example
+```
+
+A fixture maintained by hand rots, and the cases that rot first are exactly the
+interesting ones — the capped merge, the unpaid contributor, the ignored bot.
+"""
+
+
+def run(args: list[str], cwd: Path, env: dict[str, str] | None = None) -> str:
+    """Run a command, or fail loudly enough to say which one."""
+    import os
+
+    merged = dict(os.environ)
+    merged.update(env or {})
+    result = subprocess.run(args, cwd=cwd, env=merged, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise SystemExit(
+            f"{' '.join(args)} failed in {cwd}:\n{result.stdout}\n{result.stderr}"
+        )
+    return result.stdout
+
+
+def git(args: list[str], cwd: Path, author: tuple[str, str] | None = None) -> str:
+    """A git invocation with fixed dates, so the fixture is reproducible.
+
+    Without pinned dates every regeneration produces different commit hashes,
+    which means different plan ids, which means the handbook's numbers change
+    for no reason anybody can see.
+    """
+    name, email = author or ("Maintainer", "maint@example.com")
+    stamp = "2026-01-15T12:00:00+00:00"
+    return run(
+        ["git", *args],
+        cwd,
+        {
+            "GIT_AUTHOR_NAME": name,
+            "GIT_AUTHOR_EMAIL": email,
+            "GIT_AUTHOR_DATE": stamp,
+            "GIT_COMMITTER_NAME": "Maintainer",
+            "GIT_COMMITTER_EMAIL": "maint@example.com",
+            "GIT_COMMITTER_DATE": stamp,
+            "GIT_CONFIG_NOSYSTEM": "1",
+        },
+    )
+
+
+def build_history(out: Path) -> None:
+    """A repository with the merges the handbook needs."""
+    git(["init", "-q", "-b", "main"], out)
+    git(["config", "commit.gpgsign", "false"], out)
+
+    (out / "README.md").write_text(README)
+    git(["add", "-A"], out)
+    git(["commit", "-q", "-m", "chore: initial commit"], out)
+
+    for branch, key, lines, subject, co_author in MERGES:
+        author = AUTHORS[key]
+        git(["checkout", "-q", "-b", branch, "main"], out)
+
+        path = out / "src" / f"{branch.replace('/', '-')}.txt"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("".join(f"line {n}\n" for n in range(lines)))
+
+        message = subject
+        if co_author:
+            name, email = AUTHORS[co_author]
+            message += f"\n\nCo-authored-by: {name} <{email}>"
+
+        git(["add", "-A"], out)
+        git(["commit", "-q", "-m", message], out, author=author)
+        git(["checkout", "-q", "main"], out)
+        git(
+            ["merge", "-q", "--no-ff", branch, "-m", f"Merge pull request: {subject}"],
+            out,
+        )
+        git(["branch", "-q", "-D", branch], out)
+
+
+def configure(out: Path, dedalo: str) -> None:
+    """Write the config and link three of the four contributors."""
+    (out / "dedalo.toml").write_text(CONFIG)
+
+    for handle, wallet in WALLETS.items():
+        _name, email = AUTHORS[handle]
+        run([dedalo, "identity", "link", handle, wallet, "--email", email], out)
+
+    # `dee` is deliberately not linked. That is the whole point of the fixture:
+    # the handbook needs a worked example where somebody earned a share and the
+    # round cannot pay them.
+
+
+def settle_two_rounds(out: Path, dedalo: str) -> None:
+    """Two settled rounds, so `verify` and `ledger` have something to show.
+
+    `--execute` is never passed. The backend is `dry-run`, so this records the
+    rounds in the ledger without pretending anything moved.
+    """
+    for amount in ("500", "750"):
+        run([dedalo, "settle", "--amount", amount], out)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out", type=Path, required=True, help="directory to build in")
+    parser.add_argument(
+        "--dedalo",
+        default="dedalo",
+        help="the dedalo binary to use (default: whatever is on PATH)",
+    )
+    parser.add_argument(
+        "--force", action="store_true", help="delete --out first if it exists"
+    )
+    args = parser.parse_args()
+
+    if args.out.exists():
+        if not args.force:
+            raise SystemExit(f"{args.out} exists; pass --force to replace it")
+        shutil.rmtree(args.out)
+    args.out.mkdir(parents=True)
+
+    if shutil.which(args.dedalo) is None and not Path(args.dedalo).exists():
+        raise SystemExit(f"{args.dedalo} is not on PATH and is not a file")
+
+    build_history(args.out)
+    configure(args.out, args.dedalo)
+    settle_two_rounds(args.out, args.dedalo)
+
+    # Commit what the tool wrote, so a clone has the ledger the handbook cites.
+    git(["add", "-A"], args.out)
+    git(["commit", "-q", "-m", "chore: record two settled rounds"], args.out)
+
+    verify = run([args.dedalo, "verify"], args.out)
+    merges = len(MERGES)
+    print(f"built {args.out}: {merges} merges, {len(WALLETS)} linked identities")
+    print(verify.strip())
+    print(
+        "\nNothing has been pushed. To publish:\n"
+        f"  git -C {args.out} remote add origin git@github.com:dedalo-org/example.git\n"
+        f"  git -C {args.out} push -u origin main"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
