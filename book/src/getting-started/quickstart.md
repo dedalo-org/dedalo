@@ -4,6 +4,30 @@ Ten minutes, no money, no wallet, no chain. At the end you will have a payout
 plan for a real repository and a ledger that proves it was not edited
 afterwards.
 
+## Follow along, or read along
+
+Every number on this page comes from a repository you can clone:
+
+```bash
+git clone https://github.com/dedalo-org/example
+cd example
+dedalo plan --amount 1000
+```
+
+**If your output differs from what is printed here, one of the two is wrong** —
+which is the entire reason that repository exists. It is a fixture: twelve
+merges by five authors, three of them linked to wallets, one who has none, and
+a bot the config ignores. Every address in it is a well-known Solana program
+id, so nobody mistakes it for an account somebody controls.
+
+It is generated rather than hand-maintained — `scripts/make-example-repo.py` in
+this repository builds it — because the interesting cases are exactly the ones
+that would rot: the merge that hits the per-merge cap, the contributor who
+cannot be paid, the bot that is excluded rather than unlinked.
+
+The rest of this page uses `my-project`, so the commands read the way they will
+when you run them on your own.
+
 ## 1. Describe the project
 
 ```bash
