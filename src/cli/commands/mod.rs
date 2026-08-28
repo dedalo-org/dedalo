@@ -1,3 +1,4 @@
+pub mod claim;
 pub mod identity;
 pub mod init;
 pub mod ledger;

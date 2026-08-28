@@ -510,3 +510,109 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod index_stability {
+    //! The index a contributor is given must be the index the program expects.
+    //!
+    //! A claim's index is its position among the plan's payable items, and it
+    //! is hashed into the leaf. So if that ordering is not fixed by the plan
+    //! alone, two runs over the same plan produce different trees, a proof
+    //! issued today stops verifying tomorrow, and — worse — an index could
+    //! address somebody else's amount.
+    //!
+    //! Nothing said the ordering was pinned. `PayoutPlan::payable_items`
+    //! filters `items` in place, so the property rests entirely on `items`
+    //! being a fixed sequence, which is a fact about `PlanBuilder` rather than
+    //! about this module. These tests are what connect the two.
+
+    use super::*;
+    use crate::payout::PayoutPlan;
+
+    /// A real plan, from the example repository, as it sits on disk.
+    ///
+    /// A literal rather than a constructed plan on purpose: this is the path a
+    /// contributor's clone takes — JSON in `.dedalo/objects`, deserialised by
+    /// somebody who was not there when it was built. A plan assembled in
+    /// memory would skip exactly the step where an ordering could be lost.
+    const EXAMPLE_PLAN_JSON: &str = include_str!("../../tests/fixtures/example-plan.json");
+
+    /// Deserialise a plan twice and get the same tree both times.
+    ///
+    /// A plan is JSON on disk, and a contributor derives their proof from
+    /// their own clone. If a map anywhere in that path had a non-deterministic
+    /// iteration order, this is where it would show.
+    #[test]
+    fn a_plan_read_twice_yields_the_same_indices_and_the_same_root() {
+        let json = EXAMPLE_PLAN_JSON;
+
+        let first: PayoutPlan = serde_json::from_str(json).expect("the fixture parses");
+        let second: PayoutPlan = serde_json::from_str(json).expect("the fixture parses");
+
+        let left = ClaimTree::from_plan(&first).unwrap();
+        let right = ClaimTree::from_plan(&second).unwrap();
+
+        assert_eq!(left.root(), right.root(), "the root moved between reads");
+        assert_eq!(
+            left.claims().len(),
+            right.claims().len(),
+            "the tree changed size"
+        );
+        for (index, (a, b)) in left.claims().iter().zip(right.claims()).enumerate() {
+            assert_eq!(a.index, index as u64, "index is not its position");
+            assert_eq!(a, b, "claim {index} differs between two reads of one plan");
+        }
+    }
+
+    /// Every claim verifies against its own index and no other.
+    ///
+    /// This is the "money goes to the wrong index" bug stated as an assertion:
+    /// a proof issued for one contributor must not verify for another, even
+    /// when the amounts happen to be equal.
+    #[test]
+    fn a_proof_verifies_for_its_own_index_and_no_other() {
+        let plan: PayoutPlan = serde_json::from_str(EXAMPLE_PLAN_JSON).expect("the fixture parses");
+        let tree = ClaimTree::from_plan(&plan).unwrap();
+        let root = tree.root();
+
+        for (index, claim) in tree.claims().iter().enumerate() {
+            let proof = tree.proof(index).unwrap();
+            assert!(
+                ClaimTree::verify(root, claim.leaf().unwrap(), &proof),
+                "claim {index} does not verify against its own root"
+            );
+
+            for (other, other_claim) in tree.claims().iter().enumerate() {
+                if other == index {
+                    continue;
+                }
+                assert!(
+                    !ClaimTree::verify(root, other_claim.leaf().unwrap(), &proof),
+                    "claim {other} verified using claim {index}'s proof"
+                );
+            }
+        }
+    }
+
+    /// Reordering a plan's items changes the root, loudly.
+    ///
+    /// It has to: the index is in the leaf. This is the test that would fail
+    /// if somebody sorted `items` for display and did it in place — which is
+    /// exactly the change that looks harmless in review.
+    #[test]
+    fn reordering_items_changes_the_root() {
+        let mut plan: PayoutPlan =
+            serde_json::from_str(EXAMPLE_PLAN_JSON).expect("the fixture parses");
+        let before = ClaimTree::from_plan(&plan).unwrap().root();
+
+        assert!(plan.items.len() >= 2, "the fixture needs two payees");
+        plan.items.swap(0, 1);
+        let after = ClaimTree::from_plan(&plan).unwrap().root();
+
+        assert_ne!(
+            before, after,
+            "swapping two payees left the root unchanged, so the index is not \
+             actually committed to"
+        );
+    }
+}

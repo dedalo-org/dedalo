@@ -87,6 +87,7 @@ pub async fn run(cli: &Cli) -> Result<()> {
         Command::Ledger(args) => commands::ledger::run(&engine, args, cli.json),
         Command::Verify => commands::verify::run(&engine, cli.json),
         Command::Propose(args) => commands::propose::run(&engine, args, cli.json),
+        Command::Claim(args) => commands::claim::run(&engine, args, cli.json),
     }
 }
 

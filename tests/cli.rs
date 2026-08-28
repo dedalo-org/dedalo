@@ -69,6 +69,19 @@ fn project() -> TempRepo {
     repo
 }
 
+/// Save a plan and return its id, which is what `claim` and `propose` take.
+fn saved_plan_id(repo: &TempRepo) -> String {
+    let output = dedalo(repo.path())
+        .args(["plan", "--amount", "1000", "--save", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let plan: Value = serde_json::from_slice(&output).expect("plan --json is JSON");
+    plan["id"].as_str().expect("a plan has an id").to_string()
+}
+
 fn dedalo(repo: &Path) -> Command {
     let mut cmd = Command::cargo_bin("dedalo").expect("the binary must be built");
     cmd.arg("-C").arg(repo);
@@ -687,4 +700,94 @@ fn settling_through_solana_explains_that_dedalo_holds_no_key() {
         .failure()
         .stderr(contains("holds no signing key"))
         .stderr(contains("dedalo propose"));
+}
+
+/// A contributor can derive their own proof from a clone, with no network.
+///
+/// The pull model needs three things in a claimant's hands — their index,
+/// their amount, and their proof path — and until `dedalo claim` existed
+/// nothing emitted any of them. `propose` printed the root and counted the
+/// claims without ever handing one over, so the pull model as shipped had no
+/// pull.
+///
+/// Everything here comes from the saved plan and the config beside it. That is
+/// the same property the threat model claims for auditing: a contributor does
+/// not have to ask the maintainer for a blob.
+#[test]
+fn a_contributor_can_get_their_own_merkle_proof() {
+    let repo = project();
+    let plan_id = saved_plan_id(&repo);
+
+    // By handle, which is what somebody reads in a plan.
+    let by_handle: Value = serde_json::from_slice(
+        &dedalo(repo.path())
+            .args(["claim", "--plan", &plan_id, "ada", "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    )
+    .unwrap();
+
+    // And by wallet, which is what a claimer certainly knows.
+    let wallet = by_handle["account"].as_str().unwrap().to_string();
+    let by_wallet: Value = serde_json::from_slice(
+        &dedalo(repo.path())
+            .args(["claim", "--plan", &plan_id, &wallet, "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    )
+    .unwrap();
+
+    assert_eq!(by_handle, by_wallet, "the two lookups must agree");
+
+    assert_eq!(by_handle["plan_id"], plan_id.as_str());
+    assert!(by_handle["index"].is_u64(), "an index is a number");
+    // Amounts are strings everywhere, and a claim is not an exception.
+    assert!(
+        by_handle["amount"]
+            .as_str()
+            .unwrap()
+            .bytes()
+            .all(|b| b.is_ascii_digit()),
+        "amount is not a decimal string"
+    );
+    assert!(
+        by_handle["merkle_root"].as_str().unwrap().starts_with("0x"),
+        "the root should be comparable with what `propose` prints"
+    );
+    assert!(by_handle["proof"].is_array());
+}
+
+/// Claiming from the wrong plan, or as somebody the round does not pay, fails
+/// with a sentence rather than an empty proof.
+///
+/// Both are the ordinary mistakes: a stale plan id copied from an old round,
+/// and a contributor who is in `unresolved` rather than in `items`. Printing
+/// something claim-shaped for either would send a person to a chain to be told
+/// no, and gas is not refunded for that.
+#[test]
+fn claiming_what_is_not_yours_says_so_here_rather_than_on_a_chain() {
+    let repo = project();
+    let plan_id = saved_plan_id(&repo);
+
+    dedalo(repo.path())
+        .args(["claim", "--plan", &plan_id, "nobody-by-that-name"])
+        .assert()
+        .failure()
+        .stderr(contains("is not paid by plan"))
+        .stderr(contains("this round pays"));
+
+    dedalo(repo.path())
+        .args([
+            "claim",
+            "--plan",
+            "ded1000000000000000000000000000000",
+            "ada",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("no saved plan"));
 }

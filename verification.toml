@@ -187,6 +187,18 @@ notes = """
 Sums item amounts to print a total. Display only — the plan it prints was \
 decided by `payout`. tests/cli.rs pins the --json shape."""
 
+[modules."cli/commands/claim"]
+method = "tests"
+arithmetic_sites = 0
+notes = """
+Loads a saved plan, finds the claimant's item, and prints the index, amount \
+and proof. Marked `tests` rather than `exempt` because it decides *which* \
+index a person is told is theirs, and an index addresses an amount — the \
+ordering it depends on is pinned by `chain::merkle::index_stability`, and \
+`tests/cli.rs` covers the lookup by wallet and by handle, the unknown \
+claimant, and the missing plan. It re-verifies the plan and the proof before \
+printing either."""
+
 [modules."cli/commands/identity"]
 method = "tests"
 arithmetic_sites = 0
