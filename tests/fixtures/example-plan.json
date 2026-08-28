@@ -1,0 +1,73 @@
+{
+    "id": "ded1ebb700f156f6384dc99e6101b19c9271",
+    "project": "example",
+    "created_at": 1787917830,
+    "asset": {
+        "symbol": "USDC",
+        "decimals": 6,
+        "chain": "devnet",
+        "contract": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
+    },
+    "range": {
+        "branch": "main",
+        "to_commit": "33d25bb607ef28a4c333ae36ae07e88e72573cd9",
+        "merges": 12
+    },
+    "split": {
+        "gross": "1000000000",
+        "protocol": "25000000",
+        "treasury": "150000000",
+        "contributors": "825000000"
+    },
+    "items": [
+        {
+            "kind": "contributor",
+            "handle": "ada",
+            "wallet": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+            "amount": "721156157",
+            "score": 5455000,
+            "share_bps": 7211
+        },
+        {
+            "kind": "contributor",
+            "handle": "cy",
+            "wallet": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+            "amount": "57573512",
+            "score": 435500,
+            "share_bps": 575
+        },
+        {
+            "kind": "contributor",
+            "handle": "bea",
+            "wallet": "MerkS3LaQBSvM5JZsvBaLZBBSMvMB5aTuLRHrvKAyDo",
+            "amount": "46270331",
+            "score": 350000,
+            "share_bps": 462
+        },
+        {
+            "kind": "treasury",
+            "handle": "treasury",
+            "wallet": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+            "amount": "150000000",
+            "score": 0,
+            "share_bps": 1500
+        },
+        {
+            "kind": "protocol",
+            "handle": "dedalo",
+            "wallet": "SysvarRent111111111111111111111111111111111",
+            "amount": "25000000",
+            "score": 0,
+            "share_bps": 250
+        }
+    ],
+    "undistributed": "0",
+    "unresolved": [
+        {
+            "name": "Dee Halvorsen",
+            "email": "dee@example.com",
+            "score": 442500,
+            "reason": "no-wallet"
+        }
+    ]
+}

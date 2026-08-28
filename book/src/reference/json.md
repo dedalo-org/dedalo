@@ -180,6 +180,31 @@ exactly. `transactions` is ordered: a deposit before its approval reverts.
 `data` is what a signer compares against the plan — see
 [what a signer should check](../operating/multisig.md#what-a-signer-should-check).
 
+## `dedalo claim --json`
+
+```json
+{
+  "plan_id": "ded1ebb700f156f6384dc99e6101b19c9271",
+  "index": 2,
+  "account": "MerkS3LaQBSvM5JZsvBaLZBBSMvMB5aTuLRHrvKAyDo",
+  "handle": "bea",
+  "amount": "46270331",
+  "amount_display": "46.270331",
+  "merkle_root": "0xba4aced424666c5c…",
+  "proof": ["0xf04ae24d…", "0x63fdbd1f…", "0xe4ce5414…"],
+  "claim_program": "MerkS3LaQBSvM5JZsvBaLZBBSMvMB5aTuLRHrvKAyDo"
+}
+```
+
+`amount` is base units as a decimal string, as everywhere; `amount_display` is
+the same number for a person, and a consumer building a transaction wants the
+first. `proof` is ordered leaf upward and the order matters. `claim_program` is
+absent when `dedalo.toml` names none, rather than being an empty string that
+looks like an address.
+
+`index` is a position among the plan's payable items — see
+[the caveat in the command reference](cli.md#the-index-is-a-position).
+
 ## `dedalo identity link --json`
 
 ```json

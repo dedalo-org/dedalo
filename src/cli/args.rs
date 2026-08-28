@@ -72,6 +72,28 @@ pub enum Command {
     /// Emit the transactions a multisig must run to fund a round. Dedalo
     /// signs nothing and holds no key.
     Propose(ProposeArgs),
+
+    /// Show a contributor their Merkle proof, so they can claim.
+    Claim(ClaimArgs),
+}
+
+/// Arguments for `dedalo claim`.
+#[derive(Debug, Args)]
+pub struct ClaimArgs {
+    /// Saved plan to claim from, by id.
+    ///
+    /// Required rather than defaulted to the newest round: claiming from the
+    /// wrong one produces a proof that verifies against nothing, and a person
+    /// finding that out from a chain is a person who spent gas to be told no.
+    #[arg(long, value_name = "PLAN_ID")]
+    pub plan: String,
+
+    /// Wallet address, or the handle the project knows you by.
+    ///
+    /// The address is what a claimer certainly knows; the handle is what they
+    /// see in a plan. Both work.
+    #[arg(value_name = "WALLET_OR_HANDLE")]
+    pub who: String,
 }
 
 /// Arguments for `dedalo propose`.
