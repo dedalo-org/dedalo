@@ -207,13 +207,13 @@ jobs:
       # Signed provenance ties every archive to this repository, this workflow
       # and this commit, so a download can be checked against its origin:
       #   gh attestation verify dedalo-*.tar.gz --repo dedalo-org/dedalo
-      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             dist/*.tar.gz
             dist/*.zip
 
-      - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           body_path: release-notes.md
